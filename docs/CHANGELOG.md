@@ -12,4 +12,4 @@
 - **图库**：当前会话 / 全部 / 收藏夹 / 回收站，每页 9 张三列，收藏是复制副本。
 - **工作流与 LoRA**：导入 ComfyUI API JSON、占位符与节点映射、解析预览、干跑；LoRA 堆 / 单 LoRA / Power / Stacker / Tag，可改名、调强度、保存到工作流。
 - **界面**：日间 / 夜间、窄栏布局、轻提示、出图完成提示。
-- **安装**：`dsh plugin --profile web add dsh-airp-comfy-bridge`；本地目录开发用 `node tools/install.mjs --apply`。需要本地 ComfyUI，适用于 DSH 0.2.x。
+- **安装**：`dsh plugin --profile web add dsh-comfyui-rp`；本地目录开发用 `node tools/install.mjs --apply`。需要本地 ComfyUI，适用于 DSH 0.2.x。

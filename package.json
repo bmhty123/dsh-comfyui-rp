@@ -1,5 +1,5 @@
 {
-  "name": "dsh-airp-comfy-bridge",
+  "name": "dsh-comfyui-rp",
   "version": "0.2.1",
   "description": "ComfyRP Bridge：装在 DSH 里的本地文生图自动化桥。捕获会话正文 → 提示词会话 → 本地 ComfyUI 出图 → 图片回到右侧栏 / 悬浮球 / 图库。不依赖外部桥进程，也不调用 LLM。",
   "type": "module",
@@ -29,21 +29,24 @@
   "author": "bmhty123",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bmhty123/dsh-airp-comfy-bridge.git"
+    "url": "git+https://github.com/bmhty123/dsh-comfyui-rp.git"
   },
-  "homepage": "https://github.com/bmhty123/dsh-airp-comfy-bridge#readme",
+  "homepage": "https://github.com/bmhty123/dsh-comfyui-rp#readme",
   "bugs": {
-    "url": "https://github.com/bmhty123/dsh-airp-comfy-bridge/issues"
+    "url": "https://github.com/bmhty123/dsh-comfyui-rp/issues"
   },
   "keywords": [
     "dsh",
     "dsh-plugin",
     "deepseek-harness",
     "comfyui",
+    "comfyui-bridge",
     "image-generation",
     "stable-diffusion",
     "txt2img",
-    "automation"
+    "automation",
+    "roleplay",
+    "character"
   ],
   "engines": {
     "dsh": ">=0.2.0 <0.3.0-0",

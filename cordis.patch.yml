@@ -1,5 +1,5 @@
-# dsh-airp-comfy-bridge —— profile patch：插入一条 loader 条目。
+# dsh-comfyui-rp —— profile patch：插入一条 loader 条目。
 # 浏览器半区由 dsh-client-modules 通过 package.json 的 dsh.client 声明自动拾取。
 - insert:
     - id: airp-comfy
-      name: 'dsh-airp-comfy-bridge'
+      name: 'dsh-comfyui-rp'

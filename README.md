@@ -4,6 +4,8 @@
 
 ComfyRP Bridge 把 DSH 会话、提示词会话和本地 ComfyUI 串在一起：自动把正文送去写成提示词，再调用本地 ComfyUI 出图，最后把图片送回 DSH 右侧栏、悬浮球和图库。装好之后，聊天、出图、看图可以在同一个界面里完成。
 
+> npm 包名 / 仓库名：**`dsh-comfyui-rp`**（界面里叫 ComfyRP，市场卡片按包名搜 `comfyui` 也能找到）。
+
 ```text
 DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片回 DSH
 ```
@@ -93,14 +95,14 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 ### 方式一：命令行（推荐）
 
 ```powershell
-dsh plugin --profile web add dsh-airp-comfy-bridge
+dsh plugin --profile web add dsh-comfyui-rp
 ```
 
 装完重启 DSH。重启后 Host 半区日志里应出现 `[airp-comfy] 路由已注册：/__airp_comfy/*`。
 
 ### 方式二：插件市场
 
-在 DSH 的插件市场里搜 `dsh-airp-comfy-bridge` 安装。国内网络如果连不上 npm 官方源，可在市场的「自定义地址」里填镜像，例如 `https://mirrors.huaweicloud.com/repository/npm/`。
+在 DSH 的插件市场里搜 `dsh-comfyui-rp` 安装。国内网络如果连不上 npm 官方源，可在市场的「自定义地址」里填镜像，例如 `https://mirrors.huaweicloud.com/repository/npm/`。
 
 ### 方式三：本地目录（改代码用）
 

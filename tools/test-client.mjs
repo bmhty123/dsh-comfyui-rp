@@ -157,7 +157,7 @@ function runClient() {
   vm.createContext(sandbox);
   vm.runInContext(SRC, sandbox, { filename: 'lib/client.js' });
   ok(!!loaded, 'window.__ModuleLoader__.load 被调用');
-  ok(loaded && loaded.id === 'dsh-airp-comfy-bridge', 'bundle id 正确', loaded && loaded.id);
+  ok(loaded && loaded.id === 'dsh-comfyui-rp', 'bundle id 正确', loaded && loaded.id);
   return { loaded, sandbox, windowObj, documentObj };
 }
 
@@ -171,7 +171,7 @@ const mod = loaded.factory((name) => {
   throw new Error('未知 require: ' + name);
 });
 ok(!!mod && typeof mod.apply === 'function', 'factory 返回 apply');
-ok(mod.name === 'dsh-airp-comfy-bridge-client', '客户端插件 name 正确', mod.name);
+ok(mod.name === 'dsh-comfyui-rp-client', '客户端插件 name 正确', mod.name);
 ok(Array.isArray(mod.inject) && mod.inject.includes('slots'), 'inject 含 slots');
 ok(Array.isArray(mod.inject) && mod.inject.includes('sidebarRightTabs'), 'inject 含 sidebarRightTabs');
 
@@ -228,15 +228,15 @@ ok(names.includes('shell.overlay'), '注册了 shell.overlay');
 ok(names.includes('conversation.input.dock'), '注册了 conversation.input.dock');
 
 const body = registrations.find((r) => r.options.name === 'sidebar.right.pane.tab');
-ok(body && body.options.key === 'dsh-airp-comfy-bridge', '正文 key = 插件 id');
+ok(body && body.options.key === 'dsh-comfyui-rp', '正文 key = 插件 id');
 ok(body && typeof body.component === 'function', '正文有组件');
 ok(body && typeof body.options.inject === 'function' && body.options.inject('s1').sessionId === 's1', '正文能拿到 sessionId');
 const titleSeat = registrations.find((r) => r.options.name === 'sidebar.right.pane.tab.title');
-ok(titleSeat && titleSeat.options.key === 'dsh-airp-comfy-bridge', '标题 key = 插件 id');
+ok(titleSeat && titleSeat.options.key === 'dsh-comfyui-rp', '标题 key = 插件 id');
 
 ok(ctx.tabTypes.length === 1, '注册了一个右侧栏类型');
 const def = ctx.tabTypes[0] || {};
-ok(def.id === 'dsh-airp-comfy-bridge', '类型 id 正确', def.id);
+ok(def.id === 'dsh-comfyui-rp', '类型 id 正确', def.id);
 ok(def.kind === 'airp', '类型 kind = airp', def.kind);
 ok(def.title && def.title() === 'ComfyRP', '标签名 = ComfyRP');
 ok(def.keepMounted !== true, '切页 / 收起后卸载页面，避免后台 SSE');

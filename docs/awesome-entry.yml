@@ -1,5 +1,5 @@
-url: https://github.com/bmhty123/dsh-airp-comfy-bridge
-name: bmhty123/dsh-airp-comfy-bridge
+url: https://github.com/bmhty123/dsh-comfyui-rp
+name: bmhty123/dsh-comfyui-rp
 category: tools
 description:
   en: 'Local text-to-image automation for DSH: capture the conversation, send it to a prompt session, render with your own ComfyUI, and bring the images back to the sidebar, floating frame and gallery.'
