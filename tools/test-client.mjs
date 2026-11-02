@@ -317,6 +317,8 @@ ok(importAt >= 0 && parseAt > importAt, '「导入JSON」在「解析预览」�
 ok(!/w\.name \+ \(w\.active \? " · 当前" : ""\) \+ "（"/.test(SRC), '工作流名去掉节点数后缀');
 ok(!/ID " \+ wf\.id/.test(SRC), '工作流 ID 行已被保存提示替换');
 ok(/loraDetected/.test(SRC) && /当前按工作流原样/.test(SRC) && /检测到 " \+ Math.max/.test(SRC), '干跑如实显示 LoRA 检测数和覆盖状态');
+ok(/mapping: wf\.mapping/.test(SRC), '干跑把界面上当前选择的映射一起发出去（不用先保存）');
+ok(/sz\.matched/.test(SRC) && /无需改动/.test(SRC), '干跑区分「已是目标分辨率」和「没有可用值」');
 ok(!/占位符为空时/.test(SRC) && !/只留 #/.test(SRC), '删掉「占位符为空时」和「只留 #」按钮');
 {
   const presetAt = SRC.indexOf('title: "选择工作流预设"');

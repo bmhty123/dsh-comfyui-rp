@@ -10,7 +10,7 @@ ComfyRP Bridge 把 DSH 会话、提示词会话和本地 ComfyUI 串在一起：
 DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片回 DSH
 ```
 
-![右侧栏全屏看图：左边聊天，右边图片](docs/images/fullscreen.jpg)
+![全屏看图：图片和聊天并排](docs/images/fullscreen.png)
 
 ## 能做什么
 

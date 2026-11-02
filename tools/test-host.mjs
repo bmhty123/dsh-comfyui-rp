@@ -596,6 +596,18 @@ async function main() {
     eq(dry.status, 200, '干跑 → 200');
     eq(dry.data.report.positiveApplied, true, '干跑：正面已注入');
     ok(dry.data.report.size.applied, '干跑：分辨率已写');
+    const sameSize = await j('POST', '/api/workflows/dry-run', {
+      workflowId: wfId,
+      json: {
+        ...WORKFLOW,
+        77: { class_type: 'ResolutionPreset', inputs: { resolution_json: '{"version":1,"width":832,"height":1216}' } },
+      },
+      positive: 'a girl', size: { w: 832, h: 1216 }, mapping: { 77: 'size' },
+    });
+    eq(sameSize.status, 200, '干跑（分辨率本来就对）→ 200');
+    eq(sameSize.data.report.size.writes.length, 0, '干跑：值已经是目标值，没有可写的东西');
+    ok(sameSize.data.report.size.matched > 0, '干跑：认出分辨率节点本来就已经是目标尺寸（matched）');
+    ok(sameSize.data.report.size.inEffect, '干跑：inEffect 为真，不会误报「没有可用值」');
     const loraJson = {
       ...WORKFLOW,
       12: { class_type: 'LoraLoader', inputs: { loras: { __value__: [{ name: 'a.safetensors', active: true, strength: 0.8 }] } } },
