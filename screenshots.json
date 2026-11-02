@@ -1,10 +1,8 @@
 {
   "screenshots": [
     "docs/images/fullscreen.png",
-    "docs/images/overview.png",
+    "docs/images/overview-workbench.png",
     "docs/images/frame.jpg",
-    "docs/images/workbench.png",
-    "docs/images/gallery.jpg",
-    "docs/images/workflow.png"
+    "docs/images/workflow-gallery.jpg"
   ]
 }

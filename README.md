@@ -30,6 +30,8 @@ dsh plugin --profile web add dsh-comfyui-rp
 4. **概览**：打开「自动投递正文」，需要自动出图再打开「自动出图」。
 5. 先手动试一次：填正文或附加消息，点「投递最新正文」。
 
+![概览（左）和工作台（右）](docs/images/overview-workbench.png)
+
 ## 能做什么
 
 - **自动出图**：捕获正文 → 解析提示词 → 出图 → 归档，全自动；投递和出图可分开开关。
@@ -39,6 +41,8 @@ dsh plugin --profile web add dsh-comfyui-rp
 - **工作台**：三种提示词格式（内置 / 全部匹配 / 自定义标签）、多套正负面、标题、原文锚点、分辨率、连续图、LoRA、随机种子、干跑。
 - **图库**：当前会话 / 全部 / 收藏夹 / 回收站，收藏是复制副本，删错了能还原。
 - **工作流与 LoRA**：导入 ComfyUI API JSON，自动识别正面 / 负面 / 分辨率 / 输出节点，支持占位符和节点映射；LoRA 支持堆 / 单 / Power / Stacker / Tag，可改名、调强度、存回工作流。
+
+![工作流（左）和图库（右）](docs/images/workflow-gallery.jpg)
 
 ## 常用操作
 
