@@ -8,7 +8,7 @@ ComfyRP Bridge 把 DSH 会话、提示词会话和本地 ComfyUI 串在一起：
 DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片回 DSH
 ```
 
-![右侧栏全屏看图：左边聊天，右边图片](https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/fullscreen.jpg)
+![右侧栏全屏看图：左边聊天，右边图片](docs/images/fullscreen.jpg)
 
 ## 能做什么
 
@@ -22,7 +22,7 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 - 连续图（按段落比例拆滚动位置）；点「仅此图」会整组替换并保留各档强度。
 - 随机种子、超时 / 中止 / 失败提示。
 
-<img src="https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/overview.png" alt="概览：正文框、附加消息、投递按钮和自动开关" width="420">
+<img src="docs/images/overview.png" alt="概览：正文框、附加消息、投递按钮和自动开关" width="420">
 
 ### 投递与来源
 
@@ -46,7 +46,7 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 - 跟图调试、手动偏移、清空当前会话的定位。
 - 看过的图切回时不再重新加载；翻页前会先准备好下一张。
 
-<img src="https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/frame.jpg" alt="悬浮图片框：页码、翻页箭头、三点菜单" width="360">
+<img src="docs/images/frame.jpg" alt="悬浮图片框：页码、翻页箭头、三点菜单" width="360">
 
 ### 工作台与提示词
 
@@ -57,7 +57,7 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 - 自动流程跑完自动回填；本地草稿不会被旧任务覆盖。
 - 已删除的图片在「本次出图」里保留灰色占位。
 
-<img src="https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/workbench.png" alt="工作台：提示词、原文锚点、分辨率、连续图和 LoRA" width="420">
+<img src="docs/images/workbench.png" alt="工作台：提示词、原文锚点、分辨率、连续图和 LoRA" width="420">
 
 ### 图库
 
@@ -66,7 +66,7 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 - 打开位置、同步、刷新；收藏是复制副本，原图不动。
 - 删除后卡片立即消失，大图查看器自动关闭；回收站可还原。
 
-<img src="https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/gallery.jpg" alt="图库：当前会话 / 全部 / 收藏夹 / 回收站" width="420">
+<img src="docs/images/gallery.jpg" alt="图库：当前会话 / 全部 / 收藏夹 / 回收站" width="420">
 
 ### 工作流与 LoRA
 
@@ -77,7 +77,7 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 - 点 LoRA 名称可改显示名；点「保存到工作流」生效，「重置」恢复默认名。
 - 连续图选中的那条 LoRA 会灰显：强度和开关由连续图接管，但仍可拖动排序。
 
-<img src="https://raw.githubusercontent.com/bmhty123/dsh-airp-comfy-bridge/main/docs/images/workflow.png" alt="工作流：导入 ComfyUI API JSON、解析预览、节点映射" width="420">
+<img src="docs/images/workflow.png" alt="工作流：导入 ComfyUI API JSON、解析预览、节点映射" width="420">
 
 ### 界面
 

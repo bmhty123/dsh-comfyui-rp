@@ -83,7 +83,15 @@ dsh plugin --profile web add dsh-airp-comfy-bridge
 
 ## 包里有什么
 
-由 `package.json` 的 `files` 决定，当前 21 个文件、约 224 KB：
+由 `package.json` 的 `files` 决定，当前 28 个文件、约 1.0 MB（截图占 0.8 MB）：
 
-- 进包：`lib/**`、`tools/install.mjs`、`cordis.patch.yml`、README、CHANGELOG、LICENSE、第三方声明、提示词格式说明、`docs/images/*` 里的图片
-- 不进包：`tools/test-*.mjs`、`tools/test-live.mjs`、`tools/comfy-smoke.mjs`、`docs/images/_guide.md`、`.gitignore`
+- 进包：`lib/**`、`tools/install.mjs`、`cordis.patch.yml`、`screenshots.json`、README、CHANGELOG、LICENSE、第三方声明、提示词格式说明、`docs/images/*` 里的图片
+- 不进包：`tools/test-*.mjs`、`tools/test-live.mjs`、`tools/comfy-smoke.mjs`、`tools/prep-images.ps1`、`docs/images/_guide.md`、`.gitignore`
+
+## 截图和图片链接
+
+- README 里一律写仓库相对路径（`docs/images/xxx.png`）：GitHub 网页能看，市场会自己补 GitHub 图床并走它自己的加速线路。
+- 别改成 `raw.githubusercontent.com` 的绝对地址：这个域名在当前网络下直连不通（`curl` 直接 000），国内用户会看到一片裂图。
+- npm 页面不解析相对路径，那边的 README 图是不显示的——市场才是主要入口，不值得为此把路径写成绝对地址。
+- 换图直接用 `tools/prep-images.ps1`：在 `$srcDir` 里放原图（文件名按 `_guide.md`），改脚本里的输出名和尺寸后 `pwsh -File tools/prep-images.ps1` 重跑。
+
