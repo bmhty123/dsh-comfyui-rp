@@ -13,6 +13,7 @@
     "lib",
     "tools/install.mjs",
     "cordis.patch.yml",
+    "screenshots.json",
     "README.md",
     "THIRD_PARTY_NOTICES.md",
     "LICENSE",
