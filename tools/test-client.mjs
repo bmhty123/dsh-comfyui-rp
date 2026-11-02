@@ -936,7 +936,7 @@ section('概览 / 工作台 / 设置');
   const inputW = fieldW?.children?.[0];
   const inputH = fieldH?.children?.[0];
   ok(inputW && inputW.props.disabled !== true && inputH.props.disabled !== true, '不勾选听从会话 size 时宽高可编辑');
-  eq(inputW?.props.value, 832, '手动模式显示自己的宽，不被提取 size 顶掉');
+  eq(String(inputW?.props.value), '832', '手动模式显示自己的宽，不被提取 size 顶掉');
   ok(mt.includes('从当前会话提取') && mt.includes('提取') && mt.includes('全部清空'), '提示词标题行有提取 / 从当前会话提取 / 全部清空');
   eq(byClass(manualPage, 'ac-linkbtn').length >= 3, true, '三个提示词操作都是链接按钮');
   ok(byClass(manualPage, 'ac-anchorbox').length === 1 && !mt.includes('未设置原文锚点') && !mt.includes('插入点：'), '工作台保留原文锚点输入框，但默认不再重复插入点文案');
@@ -980,8 +980,12 @@ section('概览 / 工作台 / 设置');
   const fieldWL = collect(dshPage).find((n) => n.props?.label === '宽');
   const fieldHL = collect(dshPage).find((n) => n.props?.label === '高');
   ok(fieldWL?.children?.[0]?.props.disabled === true && fieldHL?.children?.[0]?.props.disabled === true, '勾选听从会话 size 后宽高变灰锁住');
-  eq(fieldWL?.children?.[0]?.props.value, 832, '锁定时显示提取到的会话宽');
-  eq(fieldHL?.children?.[0]?.props.value, 1216, '锁定时显示提取到的会话高');
+  eq(String(fieldWL?.children?.[0]?.props.value), '832', '锁定时显示提取到的会话宽');
+  eq(String(fieldHL?.children?.[0]?.props.value), '1216', '锁定时显示提取到的会话高');
+  ok(!/clamp\(e\.target\.value, 64, 4096\)/.test(SRC), '宽高输入不再每按一次键就夹到 64');
+  ok(/beginSizeEdit\("w"\)/.test(SRC) && /commitSizeField\("w"/.test(SRC), '宽高输入聚焦开始编辑、失焦才兜底');
+  ok(/onKeyDown: function \(e\) \{ if \(e\.key === "Enter"\) e\.currentTarget\.blur\(\); \}/.test(SRC), '宽高输入回车也会提交（失焦兜底）');
+  ok(/n >= 64 && n <= 4096/.test(SRC) && /String\(raw\)\.trim\(\) !== ""/.test(SRC), '中间态（比如只打了 8）先留在文本框里，不打断输入');
 
   const errJob = Object.assign({}, job, { status: 'error', images: [] });
   const idlePage = T.WorkbenchPage({
