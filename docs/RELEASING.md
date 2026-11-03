@@ -65,15 +65,23 @@ dsh plugin --profile web add dsh-comfyui-rp
 
 ## 上社区市场
 
-市场（dshmarket / awesome-dsh-plugin）不读 npm 的搜索，只读精选列表。**第一次**要手工提一条：
+市场（dshmarket / awesome-dsh-plugin）不读 npm 的搜索，只读精选列表 `awesome-dsh-plugin/awesome-dsh-plugin`。**一个 PR 只加一个文件**：`data/plugins/bmhty123__dsh-comfyui-rp.yml`，内容就是 [`docs/awesome-entry.yml`](awesome-entry.yml) 原样。
 
-1. fork `https://github.com/awesome-dsh-plugin/awesome-dsh-plugin`
-2. 在列表里加一条，字段照 [`docs/awesome-entry.yml`](awesome-entry.yml)
-3. 提 PR
+两个 README 由脚本从 `data/plugins/*.yml` 生成，不要手改，也不要一起提交。
 
-之后发新版本不用再提 PR：列表里那条指向仓库，CI 每天从 npm / GitHub 刷版本号和 star。
+提 PR 前确认（CI 会按顺序检查）：
 
-要做卡片图标和截图，就把图片放进 `docs/images/`（文件名见 `_guide.md`），再把路径加到 README 和可选的 `screenshots.json`。
+1. `package.json` 里有 `dsh.bundle.patch`（只声明 `dsh.client` 会被拒）
+2. 仓库创建满 1 天
+3. GitHub 仓库首页 About → Topics 里加了 `dsh-plugin`
+4. 描述属实、不带营销词
+5. `screenshots.json` 已存在（市场详情页的轮播图，放自己仓库里，之后改图不用再提 PR）
+
+最省事的做法是网页直接建文件：仓库首页 → `data/plugins` → Add file → Create new file → 文件名 `bmhty123__dsh-comfyui-rp.yml` → 粘贴条目 → 「Create a new branch for this commit and start a pull request」。
+
+之后发新版本不用再提 PR：CI 每天从 npm / GitHub 刷版本号和 star；截图改了推自己仓库即可。
+
+图标可选：条目里的 `icon:` 要一张 GitHub 托管的位图（96px 方形最清楚），不写就回退到作者头像。
 
 ## 出问题时
 

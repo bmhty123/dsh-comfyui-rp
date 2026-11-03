@@ -18,7 +18,13 @@ DSH 会话 → ComfyRP Bridge → 提示词会话 → 本地 ComfyUI → 图片�
 dsh plugin --profile web add dsh-comfyui-rp
 ```
 
-装完重启 DSH。插件市场里也能装。改代码用本地目录装法：`node tools/install.mjs --apply`（卸载加 `--uninstall`）。
+装完重启 DSH。插件市场里也能装；还没发 npm 时用仓库地址：
+
+```powershell
+dsh plugin --profile web add git+https://github.com/bmhty123/dsh-comfyui-rp.git
+```
+
+改代码用本地目录装法：`node tools/install.mjs --apply`（卸载加 `--uninstall`）。
 
 装好打开右侧栏，在「开始」里点 **ComfyRP**。
 
