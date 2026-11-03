@@ -18,7 +18,7 @@ import { pruneUnreachable } from '../lib/comfy.js';
 import { continuousTarget, withLoraStrength } from '../lib/jobs.js';
 import { applyLoraState } from '../lib/lora.js';
 import { createStore } from '../lib/store.js';
-import { ROUTE_PATH } from '../lib/meta.js';
+import { ROUTE_PATH, VERSION } from '../lib/meta.js';
 import { cleanBodyText } from '../lib/util.js';
 
 let pass = 0;
@@ -334,7 +334,7 @@ async function main() {
   {
     const r = await j('GET', '/api/health');
     eq(r.status, 200, 'GET /api/health → 200');
-    eq(r.data.version, '0.2.1', '版本号');
+    eq(r.data.version, VERSION, '版本号（跟 lib/meta.js 一致）');
     const s = await j('GET', '/api/state');
     eq(s.status, 200, 'GET /api/state → 200');
     ok(Array.isArray(s.data.workflows), 'state 带工作流列表');
@@ -1446,6 +1446,10 @@ async function main() {
     const singleApplied = applyLoraState(singleWf.json, singleState).workflow;
     eq(singleApplied['1'].inputs.strength_model, 0.35, '单 LoRA 连续图写入 model 强度');
     eq(singleApplied['1'].inputs.strength_clip, 0.35, '单 LoRA 连续图写入 clip 强度');
+    const negState = withLoraStrength(singleWf, null, shot('1', 'single.safetensors', -0.75));
+    const negApplied = applyLoraState(singleWf.json, negState).workflow;
+    eq(negApplied['1'].inputs.strength_model, -0.75, '连续图档位支持负数（model 强度原样写入）');
+    eq(negApplied['1'].inputs.strength_clip, -0.75, '连续图档位支持负数（clip 强度原样写入）');
 
     const powerWf = { json: { '2': { class_type: 'Power Lora Loader (rgthree)', inputs: { lora_1: { on: true, lora: 'power.safetensors', strength: 0.9, strengthTwo: 0.8 } } } } };
     const powerPlan = continuousTarget(powerWf, cfgFor('2::power.safetensors'));

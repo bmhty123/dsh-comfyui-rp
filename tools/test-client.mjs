@@ -352,6 +352,11 @@ ok(/ac-loraname/.test(cssText) && /beginNameEdit/.test(SRC) && /commitNameEdit/.
 ok(/点击 LoRA 名称可改显示名/.test(SRC) && /重置会恢复默认名/.test(SRC), 'LoRA 页有改名小字说明');
 ok(/isContTaken/.test(SRC) && /连续图接管/.test(SRC) && /taken && "cont"/.test(SRC) && /disabled: taken/.test(SRC), '连续图选中的 LoRA 灰显并禁用开关 / 强度，但保留拖动');
 ok(/contHasStrength/.test(SRC) && /typeof v === "number" && Number\.isFinite\(v\)/.test(SRC), '连续图没有有效强度时不误灰 LoRA');
+ok(/clamp\(value, -5, 5\)/.test(SRC) && !/clamp\(value, 0, 2\)/.test(SRC), '连续图档位允许负数（夹到 -5~5，不再夹到 0）');
+ok(/editContStrength/.test(SRC) && /commitContStrength/.test(SRC), '连续图档位输入期间保留原文（- / -.5），失焦才兜底');
+ok(/editStrength\(st\.nodeId, i/.test(SRC) && /commitStrength\(st\.nodeId, i/.test(SRC), 'LoRA 页强度输入允许打负数中间态，失焦才夹取');
+ok(/min: "-5", max: "5"/.test(SRC), '强度输入框标注 -5~5 范围（连续图和 LoRA 页各一处以上）');
+ok(/强度可以填负数/.test(SRC), '连续图说明里写清了可填负数');
 ok(/nameEditRef\.current = null;[\s\S]{0,60}setNameEdit\(null\)/.test(SRC), '换工作流时取消正在编辑的 LoRA 名');
 ok(/effectiveSource: "temporary"/.test(SRC) && /临时覆盖（未保存）/.test(SRC), '改动 LoRA 节点后徽标立即变成临时覆盖');
 ok(/lorasApply\(\{ workflowId: workflowId \}\)/.test(SRC) && /不需要再去工作流页点保存/.test(SRC) && /不需要再回工作流页点保存/.test(SRC), '保存到工作流会清临时覆盖，并提示无需回工作流页保存');
