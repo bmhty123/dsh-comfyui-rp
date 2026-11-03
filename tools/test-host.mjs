@@ -512,8 +512,15 @@ async function main() {
     eq(lp.data.workflow.outputNodes.length, 1, '只保存 LoRA 覆盖不会重置输出节点');
     eq(String(lp.data.workflow.outputNodes[0]), '9', '输出节点仍是原来的 SaveImage #9');
     eq(!!lp.data.workflow.loraState, true, 'LoRA 覆盖写进了工作流记录');
+    eq(lp.data.workflow.blackRetry, true, '黑图自动替换默认开启');
+    const bp = await j('PUT', `/api/workflows/${wfId}`, { blackRetry: false });
+    eq(bp.data.workflow.blackRetry, false, '可以关掉黑图自动替换');
     const a = await j('POST', `/api/workflows/${wfId}/activate`);
     eq(a.status, 200, '启用工作流 → 200');
+    await j('PUT', `/api/workflows/${wfId}`, { blackRetry: false });
+    const stOff2 = await j('GET', '/api/state');
+    eq(stOff2.data.activeWorkflow.blackRetry, false, 'state 里带出 activeWorkflow.blackRetry，前端据此跳过检测');
+    await j('PUT', `/api/workflows/${wfId}`, { blackRetry: true });
     const scan = await j('POST', '/api/workflows/scan', { workflowId: wfId });
     eq(scan.status, 200, '扫描 → 200');
     ok(scan.data.nodes.length >= 3, '扫到正/负面/分辨率节点');
@@ -608,6 +615,12 @@ async function main() {
     eq(sameSize.data.report.size.writes.length, 0, '干跑：值已经是目标值，没有可写的东西');
     ok(sameSize.data.report.size.matched > 0, '干跑：认出分辨率节点本来就已经是目标尺寸（matched）');
     ok(sameSize.data.report.size.inEffect, '干跑：inEffect 为真，不会误报「没有可用值」');
+    const fixedSeed = await j('POST', '/api/workflows/dry-run', {
+      json: WORKFLOW, positive: 'a girl', size: { w: 832, h: 1216 }, seed: 4242, includeJson: true,
+    });
+    eq(fixedSeed.status, 200, '干跑（固定种子）→ 200');
+    eq(fixedSeed.data.json['3'].inputs.seed, 4242, '固定种子：采样器的 seed 被写成填的那个数');
+    ok((fixedSeed.data.report.seeds || []).some((s) => s.fixed === true && s.after === 4242), '固定种子：报告里标了 fixed');
     const loraJson = {
       ...WORKFLOW,
       12: { class_type: 'LoraLoader', inputs: { loras: { __value__: [{ name: 'a.safetensors', active: true, strength: 0.8 }] } } },

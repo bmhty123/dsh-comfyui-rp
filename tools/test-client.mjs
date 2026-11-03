@@ -357,6 +357,52 @@ ok(/editContStrength/.test(SRC) && /commitContStrength/.test(SRC), '连续图档
 ok(/editStrength\(st\.nodeId, i/.test(SRC) && /commitStrength\(st\.nodeId, i/.test(SRC), 'LoRA 页强度输入允许打负数中间态，失焦才夹取');
 ok(/min: "-5", max: "5"/.test(SRC), '强度输入框标注 -5~5 范围（连续图和 LoRA 页各一处以上）');
 ok(/强度可以填负数/.test(SRC), '连续图说明里写清了可填负数');
+ok(/label: "固定种子"/.test(SRC) && /disabled: seedAuto/.test(SRC), '工作流页有固定种子输入框，自动换种子时置灰不可编辑');
+ok(/lastSeed/.test(SRC) && /toggleRandomSeed/.test(SRC), '自动模式下显示上一轮用的种子，取消自动时把它带进输入框');
+ok(/persistWf/.test(SRC), '改种子 / 切换开关立刻落库，不用再点保存');
+ok(/ac-blackbar/.test(cssText) && /停止自动补图/.test(SRC), '自动补图时面板顶部有「停止自动补图」条');
+ok(/BLACK_UI\.stop/.test(SRC) && /setBlackPendingGlobal/.test(SRC), '补图状态跨组件共享（FloatBall 跑，面板显示）');
+ok(/blackStopRef\.current = false/.test(SRC), '停止只影响本轮，下一轮新任务会复位');
+ok(/live = blackActive \|\|/.test(SRC), '补图进行中，图片框菜单把「请求生成」换成「终止」');
+ok(/if \(blackQueueRef\.current\.length \|\| blackBusyRef\.current\) \{[\s\S]{0,80}stopBlack\(\)/.test(SRC), '图片框菜单的「终止」会先停掉自动补图');
+ok(/if \(BLACK_UI\.stop\) BLACK_UI\.stop\(\)/.test(SRC), '全屏 / 工作台的「终止」也会停掉自动补图');
+ok(/黑图自动替换/.test(SRC) && /persistWf\(\{ blackRetry: e\.target\.checked \}\)/.test(SRC), '工作流页「图片输出相关」有黑图自动替换开关');
+ok(/activeWorkflow\.blackRetry === false/.test(SRC) && /blackQueueRef\.current = \[\]/.test(SRC), '关掉开关后不再检测，并清空待补队列');
+ok(/function judgeNearlyBlack\(d\)/.test(SRC) && /darkRatio >= 0\.995 && meanLum <= 8 && brightRatio < 0\.001/.test(SRC), '纯黑判定要同时满足暗比例 / 平均亮度 / 亮点比例');
+ok(/coverage >= 0\.5/.test(SRC), '透明图（不透明像素不足一半）不算黑');
+{
+  // 直接抽 client.js 里的 judgeNearlyBlack 跑样本：纯函数，可以在 Node 里验证。
+  const at = SRC.indexOf('function judgeNearlyBlack(d) {');
+  ok(at >= 0, '纯黑判定抽成了纯函数');
+  if (at >= 0) {
+    let depth = 0;
+    let end = -1;
+    for (let i = SRC.indexOf('{', at); i < SRC.length; i += 1) {
+      if (SRC[i] === '{') depth += 1;
+      else if (SRC[i] === '}') {
+        depth -= 1;
+        if (depth === 0) { end = i + 1; break; }
+      }
+    }
+    const fn = new Function(`${SRC.slice(at, end)}; return judgeNearlyBlack;`)();
+    const mk = (px) => {
+      const d = new Uint8ClampedArray(px.length * 4);
+      px.forEach((p, i) => {
+        d[i * 4] = p[0]; d[i * 4 + 1] = p[1]; d[i * 4 + 2] = p[2];
+        d[i * 4 + 3] = p[3] === undefined ? 255 : p[3];
+      });
+      return d;
+    };
+    const rep = (n, p) => Array.from({ length: n }, () => p);
+    eq(fn(mk(rep(4096, [0, 0, 0]))).black, true, '全黑图判为黑');
+    eq(fn(mk(rep(4096, [3, 3, 3]))).black, true, '3/255 的近黑也算黑');
+    eq(fn(mk(rep(4096, [10, 10, 10]))).black, false, '10/255 的深灰不算黑（旧逻辑会误判）');
+    eq(fn(mk([...rep(4000, [2, 2, 2]), ...rep(96, [220, 220, 220])])).black, false, '夜景（97% 暗 + 少量亮）不算黑');
+    eq(fn(mk([...rep(4050, [3, 3, 3]), ...rep(46, [240, 240, 240])])).black, false, '黑底小主体不算黑');
+    eq(fn(mk(rep(4096, [0, 0, 0, 0]))).black, false, '全透明图不算黑');
+    eq(fn(mk([...rep(10, [0, 0, 0]), ...rep(4086, [0, 0, 0, 0])])).black, false, '透明底 + 小黑块不算黑');
+  }
+}
 ok(/nameEditRef\.current = null;[\s\S]{0,60}setNameEdit\(null\)/.test(SRC), '换工作流时取消正在编辑的 LoRA 名');
 ok(/effectiveSource: "temporary"/.test(SRC) && /临时覆盖（未保存）/.test(SRC), '改动 LoRA 节点后徽标立即变成临时覆盖');
 ok(/lorasApply\(\{ workflowId: workflowId \}\)/.test(SRC) && /不需要再去工作流页点保存/.test(SRC) && /不需要再回工作流页点保存/.test(SRC), '保存到工作流会清临时覆盖，并提示无需回工作流页保存');
