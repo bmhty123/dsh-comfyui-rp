@@ -1,6 +1,6 @@
 {
   "name": "dsh-comfyui-rp",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "ComfyRP Bridge：装在 DSH 里的本地文生图自动化桥。捕获会话正文 → 提示词会话 → 本地 ComfyUI 出图 → 图片回到右侧栏 / 悬浮球 / 图库。不依赖外部桥进程，也不调用 LLM。",
   "type": "module",
   "main": "lib/index.js",

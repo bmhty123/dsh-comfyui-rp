@@ -18,6 +18,7 @@ import { pruneUnreachable } from '../lib/comfy.js';
 import { continuousTarget, withLoraStrength } from '../lib/jobs.js';
 import { applyLoraState } from '../lib/lora.js';
 import { createStore } from '../lib/store.js';
+import { askTarget } from '../lib/session.js';
 import { ROUTE_PATH, VERSION } from '../lib/meta.js';
 import { cleanBodyText } from '../lib/util.js';
 
@@ -178,6 +179,7 @@ function createFakeCtx() {
     },
     async prompt(request) {
       const s = ensure(request.sessionId);
+      sc.lastMode = request.mode;
       s.running = true;
       const text = request.content?.map((c) => c.text || '').join('') || '';
       if (emitUserMessage) emit(s.id, 'user/message', { message: { role: 'user', content: [{ type: 'text', text }] } });
@@ -1015,6 +1017,20 @@ async function main() {
     eq(a.data.job.status, 'cancelled', '任务变成 cancelled');
     ok(cancelled.includes('s-target'), '通知宿主取消了那一轮');
     ctx.get('sessionController').prompt = origPrompt;
+  }
+
+  section('投递模式：空闲 queue / 忙时 steer');
+  {
+    setReplyText('【正文】ok');
+    sessions.set('s-mode', { id: 's-mode', title: 'mode', running: false, seq: 0, events: [] });
+    const scLocal = ctx.get('sessionController');
+    scLocal.lastMode = '';
+    const got = await askTarget({ mode: 'local', ctx, sc: scLocal, sessionId: 's-mode', text: 'hello queue mode', timeoutMs: 5000 });
+    eq(scLocal.lastMode, 'queue', '目标空闲时用 queue 投递');
+    eq(got.deliveryMode, 'queue', '结果里带 deliveryMode，便于排查');
+    const sessionSrc = fs.readFileSync(new URL('../lib/session.js', import.meta.url), 'utf8');
+    ok(/IDLE_WAIT_MS = 15000/.test(sessionSrc), '先最多等 15 秒让目标会话空闲');
+    ok(/deliveryMode = busyBefore \? 'steer' : 'queue'/.test(sessionSrc), '目标还忙就改用 steer，正文不会被排到下一轮（只看到时间戳）');
   }
 
   section('自定义匹配 → 正常注入工作流');
