@@ -1223,6 +1223,13 @@ async function main() {
     eq(autoAfter.data.total, 2, '黑图补图后图片数量不变');
     ok(autoAfter.data.items.some((i) => i.id === autoImage.id), '黑图补图后原图片位置仍在');
     ok(!String(autoJob.outgoingText || '').includes('重新生成第'), '黑图复用模式不会多发会话指令');
+    const blackLog = await j('POST', '/api/black-check', {
+      imageId: 'img_probe', fileName: 'probe.png', bytes: 25468, black: true,
+      darkRatio: 1, meanLum: 0, brightRatio: 0, coverage: 1,
+    });
+    eq(blackLog.status, 200, '黑图判定可以写进 Host 日志');
+    const logsNow = await j('GET', '/api/logs');
+    ok((logsNow.data.logs || []).some((l) => /黑图检测/.test(l.message)), '日志里能看到黑图判定的统计');
 
     const allBefore = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
     const allOldIds = allBefore.data.items.map((i) => i.id);

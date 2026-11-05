@@ -403,6 +403,9 @@ ok(/coverage >= 0\.5/.test(SRC), '透明图（不透明像素不足一半）不�
     eq(fn(mk([...rep(10, [0, 0, 0]), ...rep(4086, [0, 0, 0, 0])])).black, false, '透明底 + 小黑块不算黑');
   }
 }
+ok(/BLACK_MAX_BYTES = 120000/.test(SRC) && /bytes > BLACK_MAX_BYTES/.test(SRC), '体积超过 120KB 的图不参与黑图判定（真黑图只有 20 多 KB）');
+ok(/probeBlackImage/.test(SRC) && /isNearlyBlack\(url, true\)/.test(SRC), '判黑要两次都黑才算（第二次绕过缓存再确认）');
+ok(/reportBlackCheck/.test(SRC) && /blackCheck\(/.test(SRC), '每次判定都把统计写进 Host 日志，便于复查误判');
 ok(/nameEditRef\.current = null;[\s\S]{0,60}setNameEdit\(null\)/.test(SRC), '换工作流时取消正在编辑的 LoRA 名');
 ok(/effectiveSource: "temporary"/.test(SRC) && /临时覆盖（未保存）/.test(SRC), '改动 LoRA 节点后徽标立即变成临时覆盖');
 ok(/lorasApply\(\{ workflowId: workflowId \}\)/.test(SRC) && /不需要再去工作流页点保存/.test(SRC) && /不需要再回工作流页点保存/.test(SRC), '保存到工作流会清临时覆盖，并提示无需回工作流页保存');
