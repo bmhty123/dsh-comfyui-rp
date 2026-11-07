@@ -751,6 +751,7 @@ async function main() {
     ok(sentTop.indexOf(topMarker) < sentTop.indexOf('【正文】'), '侧边栏附加消息原样放在正文前面');
     ok(sentTop.includes('【正文】') && sentTop.includes('附加消息最上面正文') && sentTop.includes('【/正文】'), '正文被【正文】简单包裹');
     ok(sentTop.includes('【基础消息】') && sentTop.includes('生成 3 套提示词'), '每次投递都有基础消息，并写明生成几套');
+    ok(sentTop.includes('Time sampled') && sentTop.includes('不是用户输入'), '桥消息里写明「时间注入不是用户输入」');
 
     const bottomMarker = '（附加消息·最下面）';
     await j('PUT', '/api/config', { capture: { extraMessage: bottomMarker, extraPosition: 'bottom' } });
@@ -761,6 +762,7 @@ async function main() {
     ok(sentBottom.endsWith('\n\n' + bottomMarker), '侧边栏附加消息原样放在最下面');
     ok(sentBottom.includes('【正文】') && sentBottom.includes('附加消息最下面正文') && sentBottom.includes('【/正文】'), '置底时正文仍被【正文】包裹');
     ok(sentBottom.indexOf('【/正文】') < sentBottom.indexOf(bottomMarker), '置底时附加消息在正文包裹之后');
+    ok(sentBottom.indexOf('Time sampled') < sentBottom.indexOf(bottomMarker), '时间注入说明在用户附加消息之前（附加消息仍是最下面）');
 
     const before = userTexts().length;
     await j('PUT', '/api/config', { capture: { extraMessage: '   ', extraPosition: 'top' } });
