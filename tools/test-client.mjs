@@ -1132,6 +1132,31 @@ ok(/if \(pinchRef\.current\.active\) return;/.test(SRC), '捏合期间第二根�
 ok(/\.ac-frame \.ac-stage\{[^}]*touch-action:none/.test(cssText), '图片区本来就禁掉了浏览器手势，双指才归插件处理');
 ok(/if \(ev\.touches && ev\.touches\.length >= 2\) return;[\s\S]{0,160}persistPrefs\(\);/.test(SRC), '捏合结束才落库，中间不写 localStorage');
 
+section('会话下拉：同名会话能区分');
+ok(/function sessionOptionLabel\(session, counts\)/.test(SRC), '会话下拉的显示名抽成纯函数');
+{
+  const at = SRC.indexOf('function sessionOptionLabel(');
+  if (at < 0) { ok(false, '会话下拉纯函数可执行'); } else {
+    let depth = 0; let end = -1;
+    for (let i = SRC.indexOf('{', at); i < SRC.length; i += 1) {
+      if (SRC[i] === '{') depth += 1;
+      else if (SRC[i] === '}') { depth -= 1; if (depth === 0) { end = i + 1; break; } }
+    }
+    const fn = new Function(SRC.slice(at, end) + '; return sessionOptionLabel;')();
+    eq(fn({ displayTitle: '沐白形象管理', firstText: '小欣，别紧张，吃点零食。', userCount: 83 }, { '沐白形象管理': 2 }),
+      '沐白形象管理 · “小欣，别紧张，吃点零食。” · 83条', '同名会话补首条用户消息 + 条数');
+    eq(fn({ displayTitle: '普通会话', firstText: '随便写点', userCount: 12 }, { '普通会话': 1 }),
+      '普通会话', '标题唯一时保持原样（不啰嗦）');
+    eq(fn({ displayTitle: '沐白形象管理' }, { '沐白形象管理': 3 }), '沐白形象管理', '同名但没有首条消息时只显示标题');
+    eq(fn({ sessionId: 'session-abcdef123456' }, {}), 'session-abcd', '没有标题时退回短 id');
+    eq(fn({ displayTitle: '长标题', firstText: '一'.repeat(40), userCount: 2 }, { '长标题': 2 }),
+      '长标题 · “' + '一'.repeat(22) + '…” · 2条', '首条消息过长要截断');
+  }
+}
+ok(/bodyMeta\.opening/.test(SRC) && /人物卡开场（最新一条助手消息就是会话第一条）/.test(SRC), '概览正文框只有开场时给出提示');
+ok(/opening: !!\(r && r\.opening\)/.test(SRC), '正文预览把「只有开场」带进 bodyMeta');
+ok(/firstText: info\.firstText/.test(API_SRC) === false, '（host 字段在 session.js，不在 api.js）');
+
 section('卸载');
 try { dispose(); ok(true, 'disposer 可调用'); } catch (e) { ok(false, 'disposer 可调用', e.message); }
 

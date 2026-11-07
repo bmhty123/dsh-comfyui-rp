@@ -18,9 +18,10 @@ import { pruneUnreachable } from '../lib/comfy.js';
 import { continuousTarget, withLoraStrength } from '../lib/jobs.js';
 import { applyLoraState } from '../lib/lora.js';
 import { createStore } from '../lib/store.js';
-import { askTarget } from '../lib/session.js';
+import { askTarget, looksLikeTimestampOnly, messageOf, openingOnly } from '../lib/session.js';
 import { ROUTE_PATH, VERSION } from '../lib/meta.js';
 import { cleanBodyText } from '../lib/util.js';
+import { moveTimeContextBeforeBridge } from '../lib/inject-order.js';
 
 let pass = 0;
 const fails = [];
@@ -123,6 +124,7 @@ function startFakeComfy() {
 /* --------------------------- 假 DSH 会话控制器 --------------------------- */
 function createFakeCtx() {
   const listeners = new Set();
+  const preStep = [];
   const sessions = new Map();
   const cancelled = [];
   let replyText = TARGET_REPLY;
@@ -154,15 +156,18 @@ function createFakeCtx() {
         items: [...sessions.values()].map((s) => ({
           sessionId: s.id,
           updatedAt: Date.now(),
-          projections: { values: { title: s.title } },
+          // 真 DSH 的 list 会把投影整份带上（title / titleInput …）；这里也照做。
+          projections: s.projections || { values: { title: s.title } },
           running: s.running,
           agentAvailable: true,
         })),
       };
     },
     async projections({ sessionId }) {
+      sc.projectionCalls = (sc.projectionCalls || 0) + 1;
       const s = sessions.get(sessionId);
-      return s ? { values: { title: s.title } } : null;
+      if (!s) return null;
+      return s.projections || { values: { title: s.title } };
     },
     async resolveAgent(sessionId) {
       const s = sessions.get(sessionId);
@@ -182,7 +187,15 @@ function createFakeCtx() {
       sc.lastMode = request.mode;
       s.running = true;
       const text = request.content?.map((c) => c.text || '').join('') || '';
-      if (emitUserMessage) emit(s.id, 'user/message', { message: { role: 'user', content: [{ type: 'text', text }] } });
+      // 真 DSH 的 user/message 负载就是消息对象本身（content / source / role），
+      // 没有 message 包裹；这里按真实形状发，才能测到 getMessage 的兼容。
+      if (emitUserMessage) {
+        emit(s.id, 'user/message', {
+          role: 'user',
+          content: [{ type: 'text', text }],
+          source: { kind: 'user', rpcId: request.requestId || 'airp-test' },
+        });
+      }
       setTimeout(() => {
         emit(s.id, 'assistant/message', {
           turn: 1,
@@ -224,13 +237,18 @@ function createFakeCtx() {
     },
     on(name, fn) {
       if (name === 'session/event') listeners.add(fn);
-      return () => listeners.delete(fn);
+      if (name === 'agent/pre-step') preStep.push(fn);
+      return () => {
+        listeners.delete(fn);
+        const at = preStep.indexOf(fn);
+        if (at >= 0) preStep.splice(at, 1);
+      };
     },
     effect() {},
   };
 
   return {
-    ctx, webServer, sessions, emit, sc, cancelled,
+    ctx, webServer, sessions, emit, sc, cancelled, preStep,
     setReplyText: (text) => { replyText = String(text); },
     setEmitUserMessage: (on) => { emitUserMessage = !!on; },
   };
@@ -264,7 +282,7 @@ async function main() {
   const prevDshHome = process.env.DSH_HOME;
   process.env.DSH_HOME = dshHome;
   const comfy = await startFakeComfy();
-  const { ctx, webServer, sessions, emit, cancelled, setReplyText, setEmitUserMessage } = createFakeCtx();
+  const { ctx, webServer, sessions, emit, cancelled, preStep, setReplyText, setEmitUserMessage } = createFakeCtx();
 
   // 预置一条旧版图片记录：没有 anchor / turn，只有 jobId 和 setIndex。
   // store 启动时应从 jobs.json 的 job.sets 回填，省得用户为了切图重生成旧图。
@@ -722,7 +740,7 @@ async function main() {
     const target = sessions.get('s-target');
     const userTexts = () => target.events
       .filter((e) => e.type === 'user/message')
-      .map((e) => (e.data?.message?.content || []).map((x) => x.text || '').join(''));
+      .map((e) => (messageOf(e)?.content || []).map((x) => x.text || '').join(''));
     const topMarker = '（附加消息·最上面）';
     await j('PUT', '/api/config', { capture: { extraMessage: topMarker, extraPosition: 'top' } });
     const r = await j('POST', '/api/forward', { text: '附加消息最上面正文' });
@@ -879,7 +897,7 @@ async function main() {
     const capTarget = sessions.get('s-target');
     const capUserTexts = () => capTarget.events
       .filter((e) => e.type === 'user/message')
-      .map((e) => (e.data?.message?.content || []).map((x) => x.text || '').join(''));
+      .map((e) => (messageOf(e)?.content || []).map((x) => x.text || '').join(''));
     const capMarker = '（自动投递附加消息）';
     await j('PUT', '/api/config', { capture: { extraMessage: capMarker, extraPosition: 'top', clearAfterSend: false } });
     const capBody = '自动投递要带附加消息的正文。';
@@ -901,6 +919,46 @@ async function main() {
     ok(capSent.includes(capMarker), '自动投递也带上侧边栏附加消息', capSent);
     ok(capSent.includes('【正文】') && capSent.includes(capBody), '自动投递正文仍在【正文】里');
     await j('PUT', '/api/config', { capture: { extraMessage: '', extraPosition: 'top', clearAfterSend: true } });
+
+    // Tavern 开局：会话里只有人物卡开场（一条助手消息，前面没有真人消息）。
+    // 这种「正文」不能投出去 —— 之前会把开场白当成最新正文。
+    sessions.set('s-greeting', {
+      id: 's-greeting', title: '沐白形象管理', seq: 1, running: false,
+      events: [
+        { type: 'user/message', seq: 1, time: Date.now(), data: { role: 'user', content: [{ type: 'text', text: '开始。请从人物卡给定的开场继续。' }], source: { kind: 'plugin:dsh-tavern' } } },
+      ],
+    });
+    await j('PUT', '/api/config', {
+      source: { followActive: false, mode: 'local', sessionId: 's-greeting', title: '沐白形象管理' },
+    });
+    await sleep(400); // 等 capture 重建
+    emit('s-greeting', 'assistant/message', {
+      turn: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: '还是这间接待区，只是楚琪已经换了个人。她身边的杨小欣却还是老样子。' }] },
+    });
+    await sleep(1800);
+    const ghost = await j('GET', '/api/jobs?limit=8');
+    ok(!(ghost.data.jobs || []).some((x) => x.sourceSessionId === 's-greeting'),
+      '只有人物卡开场的会话不会产生投递任务');
+
+    // 同一条会话真的写出第二段正文（turn 2）时照常投递，别把正常捕获一起拦掉。
+    emit('s-greeting', 'assistant/message', {
+      turn: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: '真正文来了：她把窗推开一条缝，雨声和凉气一起涌进来。' }] },
+    });
+    let realJob = null;
+    for (let i = 0; i < 30 && !realJob; i += 1) {
+      await sleep(200);
+      const list = await j('GET', '/api/jobs?limit=8');
+      realJob = (list.data.jobs || []).find((x) => x.sourceSessionId === 's-greeting');
+    }
+    ok(!!realJob, '有正文的回复照常投递');
+    if (realJob) await waitJob(realJob.id);
+    sessions.delete('s-greeting');
+    await j('PUT', '/api/config', {
+      source: { followActive: false, mode: 'local', sessionId: 's-source', title: '正文会话' },
+    });
+    await sleep(400);
   }
 
   section('悬浮球手动抓当前会话');
@@ -931,7 +989,7 @@ async function main() {
     eq(done.ownerSessionId, 's-target', '图片归属仍是当前会话');
     const users = target.events.filter((e) => e.type === 'user/message');
     ok(users.length > usersBefore, '桥会话收到了一次手动投递');
-    const sent = (users.at(-1)?.data?.message?.content || []).map((x) => x.text || '').join('');
+    const sent = (messageOf(users.at(-1))?.content || []).map((x) => x.text || '').join('');
     ok(sent.includes('第三段正文'), '手动抓的是正文来源的最后一条助手回复');
   }
 
@@ -959,7 +1017,7 @@ async function main() {
     eq(done.sourceTurn, 10, '手写正文保留来源轮次');
     const users = target.events.filter((e) => e.type === 'user/message');
     ok(users.length > before, '桥会话收到手写正文');
-    const sent = (users.at(-1)?.data?.message?.content || []).map((x) => x.text || '').join('');
+    const sent = (messageOf(users.at(-1))?.content || []).map((x) => x.text || '').join('');
     ok(sent.includes(custom), '手写正文原样投递');
     ok(!sent.includes('第三段正文'), '手写正文时不再塞入最新回复');
   }
@@ -1653,6 +1711,102 @@ async function main() {
       .every((job) => (job.sets || []).every((s) => !s.anchor)), '目标会话任务 sets 的锚点清空');
     ok(rows.some((job) => String(job.ownerSessionId || '') !== targetSid
       && (job.sets || []).some((s) => s.anchor)), '其它会话任务 sets 的锚点保留');
+  }
+
+  section('时间注入排序 / 开场白识别（纯函数）');
+  {
+    const time = { source: { kind: 'time-context', form: 'snapshot' }, content: [{ type: 'text', text: 'Time sampled while preparing turn 42, step 1: ...' }] };
+    const bridge = { source: { kind: 'user', rpcId: 'airp-abc123-mw6rtvn7' }, content: [{ type: 'text', text: '【基础消息】…' }] };
+    const human = { source: { kind: 'user', rpcId: 'rpc-1' }, content: [{ type: 'text', text: '我写的' }] };
+    const moved = moveTimeContextBeforeBridge([bridge, time]);
+    ok(moved && moved[0] === time && moved[1] === bridge, '时间注入被挪到正文前面，正文变成最后一条用户消息');
+    eq(moveTimeContextBeforeBridge([time, bridge]), null, '时间注入本来就在前面时不动');
+    eq(moveTimeContextBeforeBridge([human, time]), null, '没有桥消息时不动（不影响用户自己的对话）');
+    eq(moveTimeContextBeforeBridge([bridge]), null, '只有正文时不动');
+    eq(moveTimeContextBeforeBridge([]), null, '空列表不动');
+    const multi = moveTimeContextBeforeBridge([bridge, time, human, time]);
+    ok(multi && multi[0] === time && multi[1] === time && multi[2] === bridge && multi[3] === human, '多条时间注入一起挪到正文前');
+
+    const ev = (type, data) => ({ type, seq: 0, time: Date.now(), data });
+    const greeting = ev('assistant/message', { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '还是这间接待区，只是楚琪已经换了个人。' }] } });
+    ok(openingOnly([ev('user/message', { source: { kind: 'plugin:dsh-tavern' }, content: [{ type: 'text', text: '开始。' }] }), greeting]) === true,
+      '只有一条助手消息、前面没有真人消息 = 只有人物卡开场');
+    ok(openingOnly([ev('user/message', { source: { kind: 'user' }, content: [{ type: 'text', text: '你好' }] }), greeting]) === false,
+      '前面有真人用户消息就不算开场');
+    ok(openingOnly([greeting, ev('assistant/message', { turn: 2, step: 1, message: { content: [{ type: 'text', text: '真正文' }] } })]) === false,
+      '有第二条助手消息就不算开场');
+
+    const userEv = { type: 'user/message', seq: 1, data: { role: 'user', content: [{ type: 'text', text: '正文在 payload 本身' }], source: { kind: 'user' } } };
+    eq(messageOf(userEv).content[0].text, '正文在 payload 本身', 'user/message 的 payload 本身就是消息对象');
+    const asstEv = { type: 'assistant/message', seq: 2, data: { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text: '回复' }] } } };
+    eq(messageOf(asstEv).content[0].text, '回复', 'assistant/message 在 payload.message 下');
+    ok(looksLikeTimestampOnly('这条又只有时间戳：' + String.fromCharCode(10) + 'Time sampled while preparing turn 42, step 1: ...' + String.fromCharCode(10) + '你那段正文我这边没有收到。'), 
+      '「只收到时间戳」的回复能被识别');
+    ok(!looksLikeTimestampOnly('①场景' + String.fromCharCode(10) + '原文：她站在窗边' + String.fromCharCode(10) + '1girl, solo'), '正常提示词回复不误判');
+    ok(!looksLikeTimestampOnly('Time sampled while preparing turn 1, step 1: ...' + '长'.repeat(800)), '太长的回复不误判');
+  }
+
+  section('agent/pre-step 兜底排序');
+  {
+    ok(preStep.length > 0, 'Host 注册了 agent/pre-step');
+    const time = { source: { kind: 'time-context' }, content: [{ type: 'text', text: 'Time sampled' }] };
+    const bridge = { source: { kind: 'user', rpcId: 'airp-x-y' }, content: [{ type: 'text', text: '正文' }] };
+    const decision = { kind: 'enter', messages: [bridge, time] };
+    const got = await preStep[0]({ turn: 3, step: 1 }, async () => decision);
+    ok(got.messages && got.messages[0] === time && got.messages[1] === bridge, 'pre-step 把时间注入挪到正文前面');
+    const plain = { kind: 'enter', messages: [{ source: { kind: 'user', rpcId: 'rpc-x' } }, time] };
+    eq(await preStep[0]({}, async () => plain), plain, '没有桥消息时原样返回（不影响用户自己的对话）');
+  }
+
+  section('同名会话（Tavern 人物卡目录）能区分');
+  {
+    sessions.set('s-card-1', {
+      id: 's-card-1', title: '沐白形象管理', seq: 0, events: [], running: false,
+      projections: { values: { title: '沐白形象管理', titleInput: { first: { seq: 22, text: '“小欣，别紧张，吃点零食。”' }, count: 83 } } },
+    });
+    sessions.set('s-card-2', {
+      id: 's-card-2', title: '沐白形象管理', seq: 0, events: [], running: false,
+      projections: { values: { title: '沐白形象管理', titleInput: { first: { seq: 9, text: '“……你真的要这么做？”' }, count: 2 } } },
+    });
+    sessions.set('s-dup-plain-1', { id: 's-dup-plain-1', title: '同名对话', seq: 0, events: [], running: false });
+    sessions.set('s-dup-plain-2', {
+      id: 's-dup-plain-2', title: '同名对话', seq: 0, events: [], running: false,
+      projections: { values: { title: '同名对话', titleInput: { first: { seq: 5, text: '我坐在窗边' }, count: 7 } } },
+    });
+    const controller = ctx.get('sessionController');
+    const callsBefore = controller.projectionCalls || 0;
+    const r = await j('GET', '/api/sessions?mode=local&limit=100');
+    const cardA = r.data.sessions.find((x) => x.sessionId === 's-card-1');
+    const cardB = r.data.sessions.find((x) => x.sessionId === 's-card-2');
+    ok(/小欣/.test(cardA.firstText) && cardA.userCount === 83, '同名会话带上首条用户消息和条数');
+    ok(/真的/.test(cardB.firstText) && cardB.userCount === 2, '另一条同名会话的首条消息不一样（能区分）');
+    eq((controller.projectionCalls || 0) - callsBefore, 1, '只有拿不到首条消息的那个同名会话才多问一次 projection');
+    sessions.delete('s-card-1'); sessions.delete('s-card-2');
+    sessions.delete('s-dup-plain-1'); sessions.delete('s-dup-plain-2');
+  }
+
+  section('只有人物卡开场的会话不能当正文来源');
+  {
+    sessions.set('s-opening', {
+      id: 's-opening', title: '沐白形象管理', seq: 3, running: false,
+      events: [
+        { type: 'user/message', seq: 1, time: Date.now(), data: { role: 'user', content: [{ type: 'text', text: '开始。请从人物卡给定的开场继续。' }], source: { kind: 'plugin:dsh-tavern' } } },
+        { type: 'assistant/message', seq: 2, time: Date.now(), data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '还是这间接待区，只是楚琪已经换了个人。' }] } } },
+      ],
+    });
+    const st = await j('GET', '/api/session-text?sessionId=s-opening');
+    eq(st.data.opening, true, '会话正文接口带上「只有开场」标记');
+    const cap = await j('POST', '/api/capture', { sessionId: 's-opening' });
+    eq(cap.status, 409, '投递只有开场白的会话被拦下');
+    eq(cap.data.code, 'opening-only', '拦下时给出可读的错误码');
+    ok(/人物卡开场/.test(cap.data.error || ''), '错误里说明是人物卡开场');
+    const forced = await j('POST', '/api/capture', { sessionId: 's-opening', text: '我手动贴的开场', forward: false });
+    eq(forced.status, 200, '手写 / 预览不受影响');
+    await j('PUT', '/api/config', { source: { followActive: false, mode: 'local', sessionId: 's-opening', title: '沐白形象管理' } });
+    const preview = await j('POST', '/api/body-source/preview', {});
+    eq(preview.data.opening, true, '概览正文预览带上「只有开场」提示');
+    await j('PUT', '/api/config', { source: { followActive: true, mode: 'local', sessionId: 's-source', title: '正文会话' } });
+    sessions.delete('s-opening');
   }
 
   section('清理');
