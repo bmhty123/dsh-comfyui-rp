@@ -653,7 +653,7 @@ try {
 ok(!/已停靠左侧|已取消左侧停靠|已取消停靠/.test(SRC), '停靠 / 取消停靠的提示消息已删除');
 ok(/collapse\(e\.clientX, e\.clientY\)/.test(SRC) && /collapseFullToBall\(e\)/.test(SRC) && /detail\.x/.test(SRC), '双击关闭时悬浮球回到光标位置');
   ok(/clamp\(ball\.x, 0, size\.w - BALL\)/.test(SRC) && /clamp\(frame\.x, 0,/.test(SRC), '图片框和悬浮球可以贴到界面边界');
-  ok(/var showTR = nearAny;/.test(SRC), '没图时右上角按钮也显示（禁用状态）');
+  ok(/var showTR = nearAny \|\| peek;/.test(SRC), '没图时右上角按钮也显示（禁用状态）');
 } catch (e) {
   ok(false, 'FrameTools 渲染不炸', e.message);
 }
@@ -1054,6 +1054,83 @@ section('概览 / 工作台 / 设置');
   ok(paths.some((p) => textOf(p).includes('output')), '输出目录路径显示并可打开');
   ok(paths.some((p) => textOf(p).includes('_recycle')), '回收站路径显示并可打开');
 }
+
+section('单击亮菜单 / 双指捏合');
+ok(/var \[peek, setPeek\] = useState\(false\)/.test(SRC) && /var PEEK_MS = 5000/.test(SRC), '单击图片框短暂亮菜单，5 秒后收回');
+ok(/var showBL = nearAny \|\| menuOpen \|\| peek;/.test(SRC) && /var showBR = nearAny \|\| nearBR \|\| peek;/.test(SRC)
+  && /var showTL = nearAny \|\| peek;/.test(SRC), '亮菜单期间四角按钮全部显示');
+ok(/var startPeek = function \(\) \{[\s\S]{0,420}setMenuOpen\(true\);/.test(SRC), '亮菜单时自动展开铅笔那排菜单');
+ok(/var bumpPeek = function \(\) \{[\s\S]{0,60}if \(!peekRef\.current\) return;/.test(SRC)
+  && /peekTimer\.current = setTimeout\(endPeek, PEEK_MS\)/.test(SRC), '框内一有操作就续命，没操作才到点收回');
+ok(/if \(!d\.moved && d\.kind === "frame" && !uiDownRef\.current && !pinchRef\.current\.active\) \{[\s\S]{0,80}startPeek\(\)/.test(SRC), '只有单击（没拖动 / 没点菜单 / 没捏合）才亮菜单');
+ok(/if \(!next\) endPeek\(\);/.test(SRC), '手动关掉铅笔菜单立刻收回，不等 5 秒');
+ok(/PEEK_DELAY_MS = 240/.test(SRC) && /peekDelay\.current = setTimeout/.test(SRC), '亮菜单前等过双击间隔，双击收框不会先闪一下');
+ok(/var onUi = !!\(e\.target && e\.target\.closest && e\.target\.closest\("\[data-ui\]"\)\);/.test(SRC) && /uiDownRef\.current = onUi;/.test(SRC), '记下这次按下是不是落在菜单按钮上');
+ok(/if \(peekDelay\.current\) \{ clearPeekTimer\(\); return; \}/.test(SRC), '双击的第二下撤掉待亮的菜单，不会闪一下');
+ok(/onPointerMove: onFrameMove,/.test(SRC) && /var onFrameMove = function \(e\) \{\s*bumpPeek\(\);/.test(SRC), '鼠标在框里动也算操作');
+ok(/clearPeekTimer\(\);/.test(SRC) && /clearTimeout\(peekDelay\.current\)/.test(SRC), '卸载 / 收框时清掉亮菜单的定时器');
+
+ok(/function scaleFrameAround\(p, factor, midX, midY, vw, vh\)/.test(SRC), '框缩放算法抽成纯函数');
+{
+  const at = SRC.indexOf('function scaleFrameAround(');
+  if (at < 0) { ok(false, '框缩放纯函数可执行'); } else {
+    let depth = 0; let end = -1;
+    for (let i = SRC.indexOf('{', at); i < SRC.length; i += 1) {
+      if (SRC[i] === '{') depth += 1;
+      else if (SRC[i] === '}') { depth -= 1; if (depth === 0) { end = i + 1; break; } }
+    }
+    const fn = new Function(`${SRC.slice(at, end)}; return scaleFrameAround;`)();
+    const box = (o) => Object.assign({ x: 0, y: 0, w: 400, h: 400, anchorX: 200, anchorY: 200 }, o);
+    const up = fn(box({ x: 200, y: 100, anchorX: 400, anchorY: 300 }), 1.5, 400, 300, 2000, 1200);
+    eq(Math.round(up.w), 600, '放大 1.5 倍宽度跟着走');
+    eq(Math.round(up.h), 600, '放大 1.5 倍高度跟着走');
+    eq(Math.round(up.x), 100, '放大后两指中点在图上那一点不动');
+    eq(Math.round(up.y), 0, '放大后锚点纵向同样钉住');
+    const tiny = fn(box({ x: 0, y: 0, w: 400, h: 400 }), 0.001, 200, 200, 2000, 1200);
+    eq(Math.round(tiny.h), 360, '缩到最小也不小于 360 高');
+    const huge = fn(box({ x: 0, y: 0, w: 400, h: 400 }), 100, 200, 200, 2000, 1200);
+    eq(Math.round(huge.w), 1200, '放到最大不超过视口（取宽高里更紧的那个）');
+    const half = fn(box({ x: 0, y: 0, w: 800, h: 800, anchorX: 200, anchorY: 200 }), 0.5, 200, 200, 2000, 1200);
+    eq([Math.round(half.w), Math.round(half.x), Math.round(half.y)].join(','), '400,100,100', '缩小后 25% 处的点仍在原屏幕位置');
+    const pan = fn(box({ x: 0, y: 0, w: 800, h: 800, anchorX: 200, anchorY: 200 }), 1, 300, 300, 2000, 1200);
+    eq([Math.round(pan.x), Math.round(pan.y)].join(','), '100,100', '两指一起平移时框跟着中点走');
+    const over = fn(box({ x: 0, y: 0, w: 1000, h: 1000, anchorX: 0, anchorY: 0 }), 1, 0, 0, 800, 600);
+    eq([Math.round(over.w), Math.round(over.h)].join(','), '600,600', '比视口大的框先压回视口再缩放');
+  }
+}
+ok(/function pinchFrameStep\(p, a, b, vw, vh, dockMin\)/.test(SRC), '捏合的一步也抽成纯函数');
+{
+  const at = SRC.indexOf('function pinchFrameStep(');
+  const from = SRC.indexOf('function scaleFrameAround(');
+  if (at < 0 || from < 0) { ok(false, '捏合纯函数可执行'); } else {
+    let depth = 0; let end = -1;
+    for (let i = SRC.indexOf('{', at); i < SRC.length; i += 1) {
+      if (SRC[i] === '{') depth += 1;
+      else if (SRC[i] === '}') { depth -= 1; if (depth === 0) { end = i + 1; break; } }
+    }
+    const mod = new Function(`${SRC.slice(from, end)}; return { scaleFrameAround, pinchFrameStep };`)();
+    const step = mod.pinchFrameStep;
+    const dock = { active: true, dist: 100, docked: true, dockW: 300, dockMax: 800 };
+    eq(step(dock, { clientX: 0, clientY: 0 }, { clientX: 200, clientY: 0 }, 1600, 900, 240).dockW, 600, '停靠时两指拉开一倍，停靠宽度也翻倍');
+    eq(step(dock, { clientX: 0, clientY: 0 }, { clientX: 1000, clientY: 0 }, 1600, 900, 240).dockW, 800, '停靠宽度不会超过上限');
+    eq(step(dock, { clientX: 0, clientY: 0 }, { clientX: 5, clientY: 0 }, 1600, 900, 240).dockW, 240, '停靠宽度不会小于下限');
+    eq(step(dock, { clientX: 0, clientY: 0 }, { clientX: 0, clientY: 0 }, 1600, 900, 240), null, '两指重合时不动');
+    eq(step(Object.assign({}, dock, { active: false }), { clientX: 0, clientY: 0 }, { clientX: 200, clientY: 0 }, 1600, 900, 240), null, '没在捏合时不动');
+    const free = { active: true, dist: 200, docked: false, x: 800, y: 400, w: 400, h: 400, midX: 1000, midY: 600 };
+    const out = step(free, { clientX: 900, clientY: 600 }, { clientX: 1300, clientY: 600 }, 2000, 1200, 240);
+    eq([Math.round(out.w), Math.round(out.h), Math.round(out.x), Math.round(out.y)].join(','), '800,800,700,200', '自由状态按两指中点放大，中点钉住');
+    eq(step(free, { clientX: 900, clientY: 600 }, { clientX: 1000, clientY: 600 }, 2000, 1200, 240).docked, false, '自由状态返回的是框尺寸');
+  }
+}
+ok(/var factor = d \/ Math\.max\(1, Number\(p\.dist\) \|\| 1\);/.test(SRC) && /Math\.sqrt\(dx \* dx \+ dy \* dy\)/.test(SRC), '按两指距离比例算缩放倍数');
+ok(/addEventListener\("touchstart", onTouchStart, \{ passive: false \}\)/.test(SRC)
+  && /addEventListener\("touchmove", onTouchMove, \{ passive: false \}\)/.test(SRC), '双指手势用非 passive 监听，能压掉页面缩放 / 滚动');
+ok(/if \(!inside\(a\) \|\| !inside\(b\)\) return;/.test(SRC), '两指都在框里才接管，框外双指还能缩页面');
+ok(/if \(step\.docked\) \{[\s\S]{0,160}setFrame\(\{ dockW: step\.dockW \}, false\)/.test(SRC), '停靠时捏合改的是停靠宽度');
+ok(/dragRef\.current = null;\s*setDragging\(false\);/.test(SRC), '捏合开始先掐掉单指拖动');
+ok(/if \(pinchRef\.current\.active\) return;/.test(SRC), '捏合期间第二根手指不会再拖动图片框');
+ok(/\.ac-frame \.ac-stage\{[^}]*touch-action:none/.test(cssText), '图片区本来就禁掉了浏览器手势，双指才归插件处理');
+ok(/if \(ev\.touches && ev\.touches\.length >= 2\) return;[\s\S]{0,160}persistPrefs\(\);/.test(SRC), '捏合结束才落库，中间不写 localStorage');
 
 section('卸载');
 try { dispose(); ok(true, 'disposer 可调用'); } catch (e) { ok(false, 'disposer 可调用', e.message); }
