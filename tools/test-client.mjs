@@ -1157,6 +1157,11 @@ ok(/bodyMeta\.opening/.test(SRC) && /人物卡开场（最新一条助手消息�
 ok(/opening: !!\(r && r\.opening\)/.test(SRC), '正文预览把「只有开场」带进 bodyMeta');
 ok(/firstText: info\.firstText/.test(API_SRC) === false, '（host 字段在 session.js，不在 api.js）');
 
+section('事件流共用');
+ok((SRC.match(/new EventSource\(/g) || []).length === 1, '整个客户端只建一条 EventSource');
+ok((SRC.match(/sharedEvents\.open\(\)/g) || []).length === 2, '悬浮球与右侧栏都走共享连接');
+ok(/最后一个卸载时才关掉|最后一个走的时候才关掉/.test(SRC) && /views\.length\) closeSource\(\)/.test(SRC), '最后一个订阅者卸载才关闭连接');
+
 section('卸载');
 try { dispose(); ok(true, 'disposer 可调用'); } catch (e) { ok(false, 'disposer 可调用', e.message); }
 
