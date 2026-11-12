@@ -20,7 +20,7 @@
 |---|---|---|---|
 | OPTIONS | `*` | CORS 预检 | 无 |
 | GET | `tavern/ping` | 探活，返回版本与 routePath | 无 |
-| GET | `tavern/info` | 当前 target / source 摘要 | 配了口令就验 |
+| GET | `tavern/info` | DSH 侧默认 target / source 摘要（不参与酒馆投递） | 配了口令就验 |
 | GET | `tavern/sessions` | 本机会话列表（给下拉选会话用） | 配了口令就验 |
 | POST | `tavern/ask` | 投递正文 → 等桥会话回复 → 返回提示词 | `x-prompt-relay-token` |
 
@@ -57,7 +57,7 @@
 
 ```json
 {
-  "sessionId": "桥会话 id（就是 info/sessions 里的 target.sessionId）",
+  "sessionId": "桥会话 id（酒馆设置里选中的那个会话；不是 info 里的 defaultTarget）",
   "text": "要投递的正文",
   "timeoutMs": 300000
 }
@@ -69,10 +69,24 @@
 { "ok": true, "text": "桥会话返回的提示词", "sessionId": "...", "turn": 12 }
 ```
 
-## 重要：`sessionId` 用 `target`，不是 `source`
+## 投递用哪个会话：请求体说了算
 
-`tavern/ask` 的语义是「往这个会话投递正文、等它回复、把它写的提示词返回」，
-所以传 **`target.sessionId`**（提示词 / 桥会话）。传成 `source.sessionId` 会把正文投回正文会话。
+`POST tavern/ask` 的会话**只由请求体里的 `sessionId` 决定**——也就是酒馆设置里选中的那个
+会话（提示词 / 桥会话）。缺了直接 `400 bad-request`，不会回退到 DSH 的配置。
+
+`GET tavern/info` 里的 `defaultTarget` / `defaultSource`（以及兼容旧字段 `target` / `source`）
+是 **DSH 前端自己用的默认值**，只影响：
+
+- DSH 概览 / 工作台的「投递」按钮；
+- DSH 侧的自动捕获（源会话 → 桥会话）。
+
+它们**不参与**酒馆投递。`info.delivery === "request-session-id"` 就是这条约定的标记。
+
+## 重要：`sessionId` 传「提示词会话」
+
+`tavern/ask` 的语义是「往这个会话投递正文、等它回复、把它写的提示词返回」，所以传
+**酒馆设置里选中的提示词 / 桥会话**（通常就是 DSH 里那个负责写提示词的会话）。
+别传成正文来源会话——那样会把正文投回正文会话。
 
 ## 鉴权与 CORS
 

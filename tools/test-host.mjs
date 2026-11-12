@@ -414,8 +414,12 @@ async function main() {
 
     const info = await raw('GET', '/tavern/info', { Origin: 'http://localhost:8080' });
     eq(info.status, 200, 'GET tavern/info → 200');
-    ok(!!info.data?.target && !!info.data?.source, 'info 带 target / source 摘要');
+    ok(!!info.data?.target && !!info.data?.source, 'info 带 target / source 摘要（兼容旧字段）');
     eq(info.data?.routePath, ROUTE_PATH, 'info 带 routePath（酒馆侧拼 URL 用）');
+    eq(info.data?.delivery, 'request-session-id', 'info 说明投递会话由请求体 sessionId 决定');
+    ok(!!info.data?.defaultTarget && !!info.data?.defaultSource, 'info 带 defaultTarget / defaultSource');
+    eq(info.data?.target?.sessionId, info.data?.defaultTarget?.sessionId, '旧字段 target 与 defaultTarget 的会话一致');
+    eq(info.data?.target?.title, info.data?.defaultTarget?.title, '旧字段 target 与 defaultTarget 的标题一致');
 
     const sessions = await raw('GET', '/tavern/sessions', { Origin: 'http://localhost:8080' });
     eq(sessions.status, 200, 'GET tavern/sessions → 200');
@@ -1847,16 +1851,26 @@ async function main() {
     ok(!looksLikeTimestampOnly('Time sampled while preparing turn 1, step 1: ...' + '长'.repeat(800)), '太长的回复不误判');
   }
 
-  section('agent/pre-step 兜底排序');
+  section('agent/pre-step 时间注入处理');
   {
     ok(preStep.length > 0, 'Host 注册了 agent/pre-step');
-    const time = { source: { kind: 'time-context' }, content: [{ type: 'text', text: 'Time sampled' }] };
-    const bridge = { source: { kind: 'user', rpcId: 'airp-x-y' }, content: [{ type: 'text', text: '正文' }] };
+    const time = { source: { kind: 'time-context' }, content: [{ type: 'text', text: 'Time sampled while preparing turn 3' }] };
+    const bridge = { source: { kind: 'user', rpcId: 'airp-x-y' }, content: [{ type: 'text', text: '正文内容' }] };
     const decision = { kind: 'enter', messages: [bridge, time] };
     const got = await preStep[0]({ turn: 3, step: 1 }, async () => decision);
-    ok(got.messages && got.messages[0] === time && got.messages[1] === bridge, 'pre-step 把时间注入挪到正文前面');
+    eq(got.messages.length, 1, '时间注入折进正文，不再单独占一条 user 消息');
+    ok(got.messages[0].content[0].text.startsWith('正文内容'), '正文还在最前面');
+    ok(got.messages[0].content[0].text.includes('Time sampled'), '时间行折进同一条消息');
+    ok(got.messages[0].content[0].text.includes('不是用户输入'), '折进去的时间行带说明');
+    ok(!got.messages.some((m) => m.source && m.source.kind === 'time-context'), '数组里没有独立的时间消息');
+    ok(got.messages[0].source && got.messages[0].source.rpcId === 'airp-x-y', '折叠后仍是桥消息（来源不变）');
+
     const plain = { kind: 'enter', messages: [{ source: { kind: 'user', rpcId: 'rpc-x' } }, time] };
     eq(await preStep[0]({}, async () => plain), plain, '没有桥消息时原样返回（不影响用户自己的对话）');
+
+    // 只有时间、没有正文可折：退回「挪到正文前」，至少不动用户的消息。
+    const bridgeOnly = { kind: 'enter', messages: [bridge] };
+    eq(await preStep[0]({ turn: 4, step: 1 }, async () => bridgeOnly), bridgeOnly, '没有时间注入时原样返回');
   }
 
   section('同名会话（Tavern 人物卡目录）能区分');
@@ -1908,6 +1922,29 @@ async function main() {
     eq(preview.data.opening, true, '概览正文预览带上「只有开场」提示');
     await j('PUT', '/api/config', { source: { followActive: true, mode: 'local', sessionId: 's-source', title: '正文会话' } });
     sessions.delete('s-opening');
+  }
+
+  section('重复投递保护');
+  {
+    setReplyText('①去重测试交付\n原文：她站在窗边\nsize: 960x1440\n````text\n1girl, solo\n````');
+    const ask = (text) => fetch(base + '/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 's-target', text, timeoutMs: 5000 }),
+    }).then(async (r) => ({ status: r.status, data: await r.json() }));
+
+    const first = await ask('同一段正文用于去重测试');
+    eq(first.status, 200, '第一次投递成功');
+    ok(first.data.ok === true && !first.data.duplicate, '第一次不带 duplicate 标记');
+
+    const second = await ask('同一段正文用于去重测试');
+    eq(second.status, 200, '十秒内同一段正文重复投递 → 直接返回上次结果');
+    eq(second.data.duplicate, true, '第二次带 duplicate:true');
+    eq(second.data.text, first.data.text, '返回的提示词与第一次相同，没有再次注入');
+
+    const other = await ask('另一段不同的正文用于去重测试');
+    eq(other.status, 200, '换一段正文正常投递');
+    ok(!other.data.duplicate, '不同正文不带 duplicate');
   }
 
   section('清理');
