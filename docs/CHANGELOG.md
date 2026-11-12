@@ -1,5 +1,27 @@
 # 更新记录
 
+## 0.2.9
+
+- **新增 `/__airp_comfy/tavern/*` 跨源入口**，给酒馆助手插件用：酒馆页面在另一个端口，
+  既过不了 `requireSameOrigin` 的同源闸门、也拿不到没有 CORS 头的响应，于是单独开一条通道。
+  - `GET tavern/ping` 探活；`GET tavern/info` 看当前 target/source 摘要与 routePath；
+  - `GET tavern/sessions` 本机会话列表（`?limit=1..500`，只带选会话需要的字段：
+    `sessionId` / `title` / `displayTitle` / `updatedAt` / `running` / `live`，
+    同名会话再带 `firstText` / `userCount`）；
+  - `POST tavern/ask` 投递正文并等桥会话回复，内部**直接复用 `handleAsk()`**，语义与 `/api/ask` 完全一致；
+  - 鉴权沿用已有的 `x-prompt-relay-token`（`source.token` / `target.token`）；
+    `info` / `sessions` 也走同一道闸门（没配口令时本来就不拦，零摩擦）。
+  - **没有改动任何既有路由、`requireSameOrigin`、`handleAsk` 或前端代码**，只是外面加了一薄层。
+- **跨源白名单默认收窄**：不再放行「同机任意端口」。`tavern.origin` 为空时只认
+  `http://localhost:8080` 与 `http://127.0.0.1:8080`（酒馆默认端口）；需要别的端口 / 来源就配
+  `tavern.origin`（多条用逗号或空格分隔）；`https` 来源也不再默认放行。
+- `tavern/ping` / `info` / `sessions` 只认 GET（其余 405）；预检
+  `Access-Control-Max-Age` 从 600 降到 60，改完白名单不用等 10 分钟。
+- 文档：[`docs/TAVERN_CHANNEL.md`](TAVERN_CHANNEL.md)（路由、**`sessionId` 用 `target`** 的约定、
+  错误码表、调试 curl、已知边界）。
+- 新增 32 条 HTTP 层测试：预检 / CORS / 外站 403 / 默认白名单收窄 / ping 方法 /
+  info 与 sessions 的口令闸门 / 多来源配置归一化。主机测试 485 → 517 全绿。
+
 ## 0.2.8
 
 - **修「概览一直读取 / 工作流空白 / 图库一直加载 / 打开侧边栏后页面刷不动」**：这不是插件冲突，是浏览器连接池被事件流占满了。

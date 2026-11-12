@@ -364,6 +364,105 @@ async function main() {
     ok(!!s.data.runtime.recycleDir && s.data.runtime.recycleDir.includes('_recycle'), 'state 带回收站目录');
   }
 
+  section('酒馆跨源通道（tavern）');
+  {
+    // 用原始 http 请求：fetch 会把 Origin 这类禁止头丢掉
+    const raw = (method, p, headers = {}, body) => new Promise((resolve, reject) => {
+      const u = new URL(base + p);
+      const req = http.request({
+        host: u.hostname, port: u.port, path: u.pathname + u.search, method, headers,
+      }, (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => { text += c; });
+        res.on('end', () => {
+          let data = null;
+          try { data = JSON.parse(text); } catch { data = text; }
+          resolve({ status: res.statusCode, headers: res.headers, data });
+        });
+      });
+      req.on('error', reject);
+      if (body !== undefined) req.write(typeof body === 'string' ? body : JSON.stringify(body));
+      req.end();
+    });
+
+    const pre = await raw('OPTIONS', '/tavern/ask', {
+      Origin: 'http://localhost:8080',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type,x-prompt-relay-token',
+    });
+    eq(pre.status, 204, 'OPTIONS 预检 → 204');
+    eq(pre.headers['access-control-allow-origin'], 'http://localhost:8080', '预检回带来源');
+    ok(String(pre.headers['access-control-allow-headers'] || '').includes('x-prompt-relay-token'), '预检允许口令头');
+    eq(pre.headers['access-control-max-age'], '60', '预检缓存 60 秒（改白名单不用等 10 分钟）');
+
+    const evil = await raw('POST', '/tavern/ask', { Origin: 'http://evil.example', 'Content-Type': 'application/json' }, '{}');
+    eq(evil.status, 403, '外站来源 → 403');
+    eq(evil.data?.code, 'origin-denied', '外站来源错误码 origin-denied');
+    eq(evil.headers['access-control-allow-origin'], undefined, '被拒来源不回 CORS 头');
+
+    // 默认白名单收窄到酒馆默认端口的两个来源，别的本地端口不再放行。
+    const otherPort = await raw('GET', '/tavern/ping', { Origin: 'http://localhost:3000' });
+    eq(otherPort.status, 403, '默认白名单不再放行任意本地端口');
+
+    const ping = await raw('GET', '/tavern/ping', { Origin: 'http://127.0.0.1:8080' });
+    eq(ping.status, 200, 'GET tavern/ping → 200');
+    eq(ping.data?.tavern, true, 'ping 标记 tavern:true');
+    eq(ping.headers['access-control-allow-origin'], 'http://127.0.0.1:8080', 'ping 也带 CORS 头');
+    const pingPost = await raw('POST', '/tavern/ping', { Origin: 'http://localhost:8080' }, '{}');
+    eq(pingPost.status, 405, 'ping 只认 GET → POST 405');
+
+    const info = await raw('GET', '/tavern/info', { Origin: 'http://localhost:8080' });
+    eq(info.status, 200, 'GET tavern/info → 200');
+    ok(!!info.data?.target && !!info.data?.source, 'info 带 target / source 摘要');
+    eq(info.data?.routePath, ROUTE_PATH, 'info 带 routePath（酒馆侧拼 URL 用）');
+
+    const sessions = await raw('GET', '/tavern/sessions', { Origin: 'http://localhost:8080' });
+    eq(sessions.status, 200, 'GET tavern/sessions → 200');
+    ok(Array.isArray(sessions.data?.sessions), 'sessions 返回数组');
+    eq(sessions.data.total, sessions.data.sessions.length, 'total 与列表长度一致');
+    ok(sessions.data.sessions.every((s) => s.sessionId && s.displayTitle), '每条都有 sessionId / displayTitle');
+    const sessionsLimit = await raw('GET', '/tavern/sessions?limit=3', { Origin: 'http://localhost:8080' });
+    eq(sessionsLimit.status, 200, 'sessions 支持 limit');
+    ok(sessionsLimit.data.sessions.length <= 3, 'limit 生效');
+
+    const emptyBody = await raw('POST', '/tavern/ask', { Origin: 'http://localhost:8080', 'Content-Type': 'application/json' }, {});
+    eq(emptyBody.status, 400, '空参数 → 400（说明确实进了 handleAsk）');
+
+    // 口令闸门：配了口令之后，没过闸门的请求一律先拒（ask 在读 body 之前就拒）
+    await j('PUT', '/api/config', { source: { token: 'tavern-secret' } });
+    const noToken = await raw('POST', '/tavern/ask', {
+      Origin: 'http://localhost:8080', 'Content-Type': 'application/json',
+    }, { sessionId: 's-target', text: 'x' });
+    eq(noToken.status, 401, '配了口令却没带 → 401');
+    const infoNoToken = await raw('GET', '/tavern/info', { Origin: 'http://localhost:8080' });
+    eq(infoNoToken.status, 401, 'info 也走口令闸门');
+    const sessionsNoToken = await raw('GET', '/tavern/sessions', { Origin: 'http://localhost:8080' });
+    eq(sessionsNoToken.status, 401, 'sessions 也走口令闸门');
+    const goodToken = await raw('POST', '/tavern/ask', {
+      Origin: 'http://localhost:8080', 'Content-Type': 'application/json', 'x-prompt-relay-token': 'tavern-secret',
+    }, {});
+    eq(goodToken.status, 400, '带对口令后放行到参数校验');
+    const infoToken = await raw('GET', '/tavern/info', {
+      Origin: 'http://localhost:8080', 'x-prompt-relay-token': 'tavern-secret',
+    });
+    eq(infoToken.status, 200, '带对口令后 info 正常');
+    await j('PUT', '/api/config', { source: { token: '' } });
+
+    // 显式配了 tavern.origin 之后，默认的 8080 不再自动放行；多条用逗号分隔。
+    await j('PUT', '/api/config', { tavern: { origin: 'http://localhost:9090' } });
+    const custom = await raw('GET', '/tavern/ping', { Origin: 'http://localhost:9090' });
+    eq(custom.status, 200, '配置的 origin 放行');
+    const oldDefault = await raw('GET', '/tavern/ping', { Origin: 'http://localhost:8080' });
+    eq(oldDefault.status, 403, '配置后未列出的来源被拒');
+    const multi = await j('PUT', '/api/config', { tavern: { origin: 'http://localhost:9090, http://127.0.0.1:9091' } });
+    eq(multi.data?.config?.tavern?.origin, 'http://localhost:9090, http://127.0.0.1:9091', '多条来源按逗号归一化');
+    await j('PUT', '/api/config', { tavern: { origin: '' } });
+    const restored = await j('GET', '/api/config');
+    eq(restored.data?.config?.source?.hasToken, false, '口令已还原（不影响后续用例）');
+    eq(restored.data?.config?.tavern?.origin, '', 'tavern.origin 已还原');
+  }
+
   section('旧图回填 anchor / turn');
   {
     const rows = JSON.parse(fs.readFileSync(path.join(dataDir, 'images.json'), 'utf8'));
