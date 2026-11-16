@@ -1742,6 +1742,7 @@ async function main() {
     eq(rjob.status, 'done', '连续图整组替换完成', rjob.error || '');
     eq(rjob.regenMode, 'continuous', '连续图仅此图标记为 continuous');
     ok(String(rjob.outgoingText).includes('这一组连续图的提示词（1 套）') && !String(rjob.outgoingText).includes('连续测试正文'), '连续图整组替换发给了桥会话（不带正文）');
+    ok(!/连续 \d+\/\d+/.test(String(rjob.outgoingText)), '连续图重生成：标题去掉「连续 k/N · 强度」尾巴');
     eq(rjob.images.length, 3, '连续图整组替换仍然 3 张');
     eq(JSON.stringify(rjob.sets.map((s) => s.continuousShot && s.continuousShot.strength)), JSON.stringify(strengths), '连续图整组替换保留各档强度');
     eq(JSON.stringify(rjob.images.map((i) => i.setIndex)), JSON.stringify([0, 1, 2]), '连续图整组替换重排 setIndex');
@@ -2019,6 +2020,17 @@ async function main() {
     const bin = await j('GET', '/api/recycle');
     ok(bin.data.items.some((i) => i.id === oldFirst.id), '落位：旧图在回收站里（可还原）');
 
+    // ③b 同一组多张用同一个锚点（连续图）：每张各自认领一张旧图，别只回收一张
+    const groupSets = [0, 1, 2].map((i) => mk('第一处锚点。', `1girl, group ${i}`));
+    const r3b = await j('POST', '/api/generate', {
+      sessionId: sid, sessionTitle: title, text: body2, sets: groupSets,
+    });
+    const job3b = await waitJob(r3b.data.job.id);
+    eq(job3b.status, 'done', '同锚点一组三张出图完成', job3b.error || '');
+    list = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    eq(list.data.items.filter((i) => i.anchor === '第一处锚点。').length, 3, '同锚点一组三张：只保留最新那一组（3 张）');
+    eq(list.data.total, 5, '同锚点一组三张：旧的那张被回收，剩下 5 张');
+
     // ④ 认不出位置 → 散图夹，只在图库「全部」出现
     const r4 = await j('POST', '/api/generate', {
       sessionId: sid, sessionTitle: title, text: body2,
@@ -2037,6 +2049,20 @@ async function main() {
     await j('POST', '/api/active-session', { sessionId: sid, title });
     const stateNow = await j('GET', '/api/state');
     ok(!stateNow.data.images.some((i) => i.id === loose.data.image.id), '散图：图片框不显示');
+
+    // ⑤ 完全没开会话：能出图，但只能进散图夹
+    await j('POST', '/api/active-session', { sessionId: '' });
+    const r5 = await j('POST', '/api/generate', {
+      sets: [mk('', '1girl, no session at all')],
+    });
+    const job5 = await waitJob(r5.data.job.id);
+    eq(job5.status, 'done', '散图：没开会话也能出图', job5.error || '');
+    const noSess = await j('GET', `/api/images/${job5.images[0].id}`);
+    eq(noSess.data.image.scope, 'loose', '散图：没开会话的图进散图夹');
+    eq(noSess.data.image.sessionId, '', '散图：没开会话时没有归属');
+    const emptyState = await j('GET', '/api/state');
+    ok(!emptyState.data.images.some((i) => i.id === noSess.data.image.id), '散图：没开会话时图片框也不显示');
+    await j('POST', '/api/active-session', { sessionId: sid, title });
   }
 
   section('会话读史接口兼容（新宿主已经没有 inspect）');
@@ -2059,6 +2085,25 @@ async function main() {
     sc.events = originalEvents;
     const viaEvents = await j('GET', '/api/session-text?sessionId=s-source');
     eq(viaEvents.status, 200, 'events() 路径照常工作');
+  }
+
+  section('捕获路径也按锚点替换（同锚点 = 同一个位置）');
+  {
+    const sid = 's-anchor-capture';
+    const title = '锚点捕获';
+    setReplyText(TARGET_REPLY);
+    const a = await j('POST', '/api/forward', { text: '第一段正文。', ownerSessionId: sid, ownerSessionTitle: title });
+    const aJob = await waitJob(a.data.job.id);
+    eq(aJob.status, 'done', '捕获路径：第一段出图完成', aJob.error || '');
+    const firstIds = aJob.images.map((i) => i.id);
+    const b = await j('POST', '/api/forward', { text: '第二段正文。', ownerSessionId: sid, ownerSessionTitle: title });
+    const bJob = await waitJob(b.data.job.id);
+    eq(bJob.status, 'done', '捕获路径：第二段出图完成', bJob.error || '');
+    const list = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    eq(list.data.total, 2, '捕获路径：同锚点的新图替换旧图，仍然只有 2 张');
+    ok(firstIds.every((id) => !list.data.items.some((i) => i.id === id)), '捕获路径：旧图离开会话列表');
+    const bin = await j('GET', '/api/recycle');
+    ok(firstIds.every((id) => bin.data.items.some((i) => i.id === id)), '捕获路径：旧图进回收站（可还原）');
   }
 
   section('清理');
