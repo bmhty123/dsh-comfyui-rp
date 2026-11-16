@@ -2106,6 +2106,59 @@ async function main() {
     ok(firstIds.every((id) => bin.data.items.some((i) => i.id === id)), '捕获路径：旧图进回收站（可还原）');
   }
 
+  section('黑图自动替换：原位、原张数、原提示词');
+  {
+    const sid = 's-black';
+    const title = '黑图测试';
+    setReplyText(TARGET_REPLY);
+    // 一轮两张（两套不同锚点），拿第二张（列表里更旧的位置）做黑图替换。
+    const g = await j('POST', '/api/forward', {
+      text: '黑图测试正文。她站在窗边，回头看了一眼。她坐到椅子上，把双手交叠放在膝上。',
+      ownerSessionId: sid, ownerSessionTitle: title, sourceTurn: 42,
+    });
+    const base = await waitJob(g.data.job.id);
+    eq(base.status, 'done', '黑图测试：基础任务完成', base.error || '');
+    eq(base.images.length, 2, '黑图测试：一轮两张');
+    const before = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
+    eq(before.data.total, 2, '黑图测试：替换前两张');
+    const target = before.data.items.find((i) => i.setIndex === 1);
+    eq(!!target, true, '黑图测试：找得到 setIndex=1 那张');
+    const beforeIdx = before.data.items.findIndex((i) => i.id === target.id);
+    const beforeOrder = target.order;
+    const beforeAnchor = target.anchor;
+    const beforeTurn = target.turn;
+    const otherId = before.data.items.find((i) => i.id !== target.id).id;
+
+    const r = await j('POST', '/api/regenerate', {
+      imageId: target.id, jobId: target.jobId, setIndex: target.setIndex,
+      // 故意传成别的会话：补图必须留在图片自己的会话里，不能跟着“当前窗口”跑。
+      sessionId: 's-other-session', sessionTitle: '别的会话', mode: 'auto',
+    });
+    const job = await waitJob(r.data.job.id);
+    eq(job.status, 'done', '黑图测试：替换任务完成', job.error || '');
+    eq(job.regenMode, 'auto', '黑图测试：标记 auto');
+    eq(job.ownerSessionId, sid, '黑图测试：补图任务留在图片自己的会话里');
+    eq(job.images.length, 1, '黑图测试：只重出一张');
+    eq(job.images[0].id, target.id, '黑图测试：仍用同一个图片 id');
+    eq(job.images[0].setIndex, target.setIndex, '黑图测试：用的是那一套提示词（setIndex 对得上）');
+    const after = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
+    eq(after.data.total, 2, '黑图测试：替换后张数仍是 2');
+    eq(after.data.items.findIndex((i) => i.id === target.id), beforeIdx, '黑图测试：替换后位置不变');
+    const now = after.data.items.find((i) => i.id === target.id);
+    eq(now.order, beforeOrder, '黑图测试：排位（order）不变');
+    eq(now.anchor, beforeAnchor, '黑图测试：锚点不变');
+    eq(now.turn, beforeTurn, '黑图测试：楼层不变');
+    ok(now.absPath.includes(title), '黑图测试：新文件仍在这个会话的目录里');
+    ok(after.data.items.some((i) => i.id === otherId), '黑图测试：另一张没被牵连');
+    const bin = await j('GET', '/api/recycle');
+    ok(bin.data.items.some((i) => i.id !== target.id && i.fileName && String(i.sessionId || '') === sid), '黑图测试：旧文件进了回收站');
+    // 内部任务只用于补图复检，不能顶掉“当前这轮”的任务。
+    await j('POST', '/api/active-session', { sessionId: sid, title });
+    const st = await j('GET', '/api/state');
+    ok(st.data.jobs.some((x) => x.internal === true), '黑图测试：补图任务仍在状态列表里（复检要用）');
+    ok(st.data.jobs[0] && st.data.jobs[0].internal !== true, '黑图测试：正常任务排在补图任务前面');
+  }
+
   section('清理');
   {
     await fetch(`${base}/api/recycle/purge`, { method: 'POST' }).catch(() => {});

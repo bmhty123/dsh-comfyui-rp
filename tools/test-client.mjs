@@ -1013,6 +1013,8 @@ section('概览 / 工作台 / 设置');
   ok(collect(autoPage).some((n) => n.props && n.props.value === 'auto-new-prompt'), '自动流程任务比草稿新时，工作台自动显示任务提示词');
   ok(collect(autoPage).some((n) => n.props && n.props.value === '这一场的最后一句。') && !textOf(autoPage).includes('插入点：这一场的最后一句。'), '任务里的原文锚点在输入框里显示，不再重复插入点文案');
   ok(textOf(autoPage).includes('锚点对上了现有图') && (textOf(autoPage).match(/锚点对上了现有图/g) || []).length === 1, '锚点匹配到图片时只显示一条小字（说明会替换那张）');
+  ok(/黑图自动替换/.test(textOf(autoPage)) && /toggleBlackRetry/.test(SRC) && /blackRetry/.test(SRC), '工作台有「黑图自动替换」开关（和工作流那个字段同一个）');
+  ok(/var job = visibleJobs\[0\] \|\| null;/.test(SRC) && /\|\| visibleJobs\[0\] \|\| null;/.test(SRC), '内部补图任务不会被当成“当前这轮”');
   sandbox.localStorage.setItem('airp-comfy:workbench:v1', JSON.stringify({
     sets: [{
       title: '新草稿', anchor: '草稿里保存的原文锚点。',
