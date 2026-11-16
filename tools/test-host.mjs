@@ -1239,6 +1239,8 @@ async function main() {
     await j('POST', '/api/active-session', { sessionId: 's-source', title: '正文会话' });
     const r = await j('POST', '/api/generate', {
       sessionId: 's-source', sourceSessionId: 's-source', sourceTurn: 7,
+      // 工作台出图靠正文判断落位：锚点就在这份正文里 → 插进会话夹。
+      text: '前面还有两句话。手动工作台里粘的最后一句。',
       sets: [{ title: '', anchor: '手动工作台里粘的最后一句。', size: null, positive: '1girl, solo, no title, no size', negative: '' }],
     });
     const job = await waitJob(r.data.job.id);
@@ -1297,6 +1299,7 @@ async function main() {
     const r = await j('POST', '/api/generate', {
       sessionId: 's-source', sessionTitle: '正文会话',
       sourceSessionId: 's-source', sourceSessionTitle: '正文会话',
+      text: '前面还有一句话。同一会话里提取的最后一句。',
       sets: [{ title: '同会话', anchor: '同一会话里提取的最后一句。', size: null, positive: '1girl, same session manual', negative: '' }],
     });
     eq(r.status, 200, '同会话手动生图 → 200');
@@ -1345,8 +1348,10 @@ async function main() {
     eq(rjob.regenMode, 'single', '仅此图重生成标记为 single');
     ok(String(rjob.images[0].url || '').includes('?v='), '原地替换后 URL 带版本号，绕过 immutable 缓存');
     ok(String(rjob.text) === replaceBody, 'job.text 保留正文原文，不再混入指令');
-    ok(String(rjob.outgoingText).includes('【基础消息】') && String(rjob.outgoingText).includes('重新生成第 1 张图的提示词（1 套）'), '仅此图投递带基础消息');
-    ok(String(rjob.outgoingText).includes('【重新生成要求】') && String(rjob.outgoingText).includes('重新生成第1张图的提示词') && String(rjob.outgoingText).includes('【/重新生成要求】'), '重新生成要求被简单包裹');
+    ok(String(rjob.outgoingText).includes('【基础消息】') && String(rjob.outgoingText).includes('重新生成「') && String(rjob.outgoingText).includes('这张图的提示词（1 套）'), '仅此图投递带基础消息（用标题认人）');
+    // 跟酒馆版一致：重新生成不带正文（省 token），玩家要求进【重新生成要求】。
+    ok(!String(rjob.outgoingText).includes('【正文】'), '重新生成不重发正文');
+    ok(!String(rjob.outgoingText).includes('第 1 张') && !String(rjob.outgoingText).includes('第1张'), '重新生成不再报「第 N 张」');
     const afterRegen = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
     eq(afterRegen.data.total, 2, '重新生成后图片数量不变');
     eq(afterRegen.data.items.findIndex((i) => i.id === oldId), oldIndex, '重新生成保留原图片位置，不排到最新');
@@ -1421,9 +1426,10 @@ async function main() {
     eq(allJob.status, 'done', '全部重生成完成', allJob.error || '');
     eq(allJob.regenMode, 'all', '全部重生成标记为 all');
     eq(allJob.images.length, 2, '全部重生成仍出本轮的两张');
-    ok(String(allJob.outgoingText).includes('【基础消息】') && String(allJob.outgoingText).includes('重新生成本轮全部 2 张图的提示词（2 套）'), '全部重生成投递带基础消息和套数');
-    ok(String(allJob.outgoingText).includes('【重新生成要求】') && String(allJob.outgoingText).includes('重新生成本轮全部图片的提示词') && String(allJob.outgoingText).includes('【/重新生成要求】'), '全部重生成要求被简单包裹');
-    ok(String(allJob.outgoingText).includes('【额外要求】') && String(allJob.outgoingText).includes('保持人物不变') && String(allJob.outgoingText).includes('【/额外要求】'), '共用文本框要求被简单包裹后投递');
+    ok(String(allJob.outgoingText).includes('【基础消息】') && String(allJob.outgoingText).includes('重新生成本轮这 2 张图的提示词（2 套）'), '全部重生成投递带基础消息和套数');
+    ok(!String(allJob.outgoingText).includes('【正文】'), '全部重生成也不重发正文');
+    ok(String(allJob.outgoingText).includes('【重新生成要求】') && String(allJob.outgoingText).includes('保持人物不变') && String(allJob.outgoingText).includes('【/重新生成要求】'), '玩家要求进【重新生成要求】（跟酒馆版同一个块名）');
+    ok(!String(allJob.outgoingText).includes('【额外要求】'), '不再有【额外要求】这一块');
     const afterAll = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
     eq(afterAll.data.total, 2, '全部重生成后同一正文只保留最新一组');
     ok(allOldIds.every((id) => !afterAll.data.items.some((i) => i.id === id)), '全部重生成的旧图全部离开当前列表');
@@ -1439,10 +1445,17 @@ async function main() {
     const title = '同正文替换';
     const a1 = await j('POST', '/api/forward', { text: '正文 A。', ownerSessionId: sid, ownerSessionTitle: title });
     const a1Job = await waitJob(a1.data.job.id);
+    // 正文 B 换成另一段锚点：同锚点就是同一个位置（T7），两段正文用同一批锚点
+    // 本来就会互相替换，那不是「误伤」，是设计如此。
+    const B_REPLY = TARGET_REPLY
+      .replace('她站在窗边，回头看了一眼。', '她靠在门框上，手里拿着一封信。')
+      .replace('她坐到椅子上，把双手交叠放在膝上。', '风吹过窗帘，把桌上的纸吹散了一地。');
+    setReplyText(B_REPLY);
     const b1 = await j('POST', '/api/forward', { text: '正文 B。', ownerSessionId: sid, ownerSessionTitle: title });
     const b1Job = await waitJob(b1.data.job.id);
     const favId = a1Job.images[0].id;
     await j('POST', `/api/images/${favId}/favorite`);
+    setReplyText(TARGET_REPLY);
     const a2 = await j('POST', '/api/forward', {
       text: '正文 A。', ownerSessionId: sid, ownerSessionTitle: title, replaceOld: true,
     });
@@ -1465,7 +1478,8 @@ async function main() {
     const r1 = await j('POST', '/api/generate', {
       sessionId: 's-rename',
       sessionTitle: '第一次标题',
-      sets: [{ title: '', size: null, positive: '1girl, solo, rename one', negative: '' }],
+      text: '重命名测试正文。换标题不该换目录。',
+      sets: [{ title: '', anchor: '换标题不该换目录。', size: null, positive: '1girl, solo, rename one', negative: '' }],
     });
     const job1 = await waitJob(r1.data.job.id);
     eq(job1.status, 'done', '同会话改标题后仍能出图', job1.error || '');
@@ -1476,7 +1490,8 @@ async function main() {
     const r2 = await j('POST', '/api/generate', {
       sessionId: 's-rename',
       sessionTitle: '第二次标题',
-      sets: [{ title: '', size: null, positive: '1girl, solo, rename two', negative: '' }],
+      text: '重命名测试正文。换标题不该换目录。',
+      sets: [{ title: '', anchor: '换标题不该换目录。', size: null, positive: '1girl, solo, rename two', negative: '' }],
     });
     const job2 = await waitJob(r2.data.job.id);
     eq(job2.status, 'done', '同会话再次改标题仍能出图', job2.error || '');
@@ -1688,7 +1703,7 @@ async function main() {
       continuousShot: { nodeId: '4', name: 'test.safetensors', strength, index: i + 1, total: 3 },
     }));
     const g = await j('POST', '/api/generate', {
-      sets, text: '连续测试正文。', sessionId: sid, sessionTitle: title,
+      sets, text: '连续测试正文。连续测试锚点。就在中间这句。', sessionId: sid, sessionTitle: title,
       sourceSessionId: sid, sourceSessionTitle: title, sourceTurn: 5,
     });
     const base = await waitJob(g.data.job.id);
@@ -1716,7 +1731,7 @@ async function main() {
     const rjob = await waitJob(r.data.job.id);
     eq(rjob.status, 'done', '连续图整组替换完成', rjob.error || '');
     eq(rjob.regenMode, 'continuous', '连续图仅此图标记为 continuous');
-    ok(String(rjob.outgoingText).includes('连续测试正文') && String(rjob.outgoingText).includes('重新生成这一组连续图的提示词'), '连续图整组替换确实发给了桥会话');
+    ok(String(rjob.outgoingText).includes('这一组连续图的提示词（1 套）') && !String(rjob.outgoingText).includes('连续测试正文'), '连续图整组替换发给了桥会话（不带正文）');
     eq(rjob.images.length, 3, '连续图整组替换仍然 3 张');
     eq(JSON.stringify(rjob.sets.map((s) => s.continuousShot && s.continuousShot.strength)), JSON.stringify(strengths), '连续图整组替换保留各档强度');
     eq(JSON.stringify(rjob.images.map((i) => i.setIndex)), JSON.stringify([0, 1, 2]), '连续图整组替换重排 setIndex');
@@ -1791,7 +1806,9 @@ async function main() {
     eq(rjob.status, 'done', '重新生成最新正文任务完成', rjob.error || '');
     eq(rjob.text, newBody, '重新生成使用正文来源的最新正文，而不是图片旧任务的正文');
     eq(rjob.sourceTurn, 88, '重新生成把最新正文的 turn 一起带过去');
-    ok(String(rjob.outgoingText).includes(newBody), '投递出去的桥消息里是最新正文');
+    // 重新生成不带正文（省 token）：正文来源的最新正文只用来匹配旧图 / 记录图片资料。
+    ok(!String(rjob.outgoingText).includes(newBody), '重新生成的桥消息不重发正文');
+    ok(String(rjob.outgoingText).includes('重新生成「'), '重新生成仍然说清楚要重出哪一张');
     ok(!String(rjob.outgoingText).includes(oldBody), '旧任务正文没有混进桥消息');
   }
 
@@ -1945,6 +1962,71 @@ async function main() {
     const other = await ask('另一段不同的正文用于去重测试');
     eq(other.status, 200, '换一段正文正常投递');
     ok(!other.data.duplicate, '不同正文不带 duplicate');
+  }
+
+  section('落位：同锚点替换 / 新场景插入 / 散图夹');
+  {
+    const sid = 's-place';
+    const title = '落位测试';
+    const body1 = '第一处锚点。中间一句话。第三处锚点。';
+    const mk = (anchor, positive) => ({ title: '', anchor, size: null, positive, negative: '' });
+
+    // ① 两个新场景：排在最新（列表最前）
+    const r1 = await j('POST', '/api/generate', {
+      sessionId: sid, sessionTitle: title, text: body1,
+      sets: [mk('第一处锚点。', '1girl, first'), mk('第三处锚点。', '1girl, third')],
+    });
+    const job1 = await waitJob(r1.data.job.id);
+    eq(job1.status, 'done', '落位：首轮出图完成', job1.error || '');
+    let list = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    eq(list.data.total, 2, '落位：首轮两张都在会话夹');
+    eq(list.data.items[0].anchor, '第三处锚点。', '落位：新图在前（排位从大到小）');
+
+    // ② 新场景插回正文中间
+    const body2 = '第一处锚点。第二处锚点。中间一句话。第三处锚点。';
+    const r2 = await j('POST', '/api/generate', {
+      sessionId: sid, sessionTitle: title, text: body2,
+      sets: [mk('第二处锚点。', '1girl, second')],
+    });
+    const job2 = await waitJob(r2.data.job.id);
+    eq(job2.status, 'done', '落位：新场景出图完成', job2.error || '');
+    list = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    eq(list.data.items.map((i) => i.anchor).join('|'), '第三处锚点。|第二处锚点。|第一处锚点。',
+      '落位：新场景按正文先后插到两张中间');
+
+    // ③ 同锚点 = 同一个位置：旧的进回收站，新图继承排位
+    const oldFirst = list.data.items.find((i) => i.anchor === '第一处锚点。');
+    const r3 = await j('POST', '/api/generate', {
+      sessionId: sid, sessionTitle: title, text: body2,
+      sets: [mk('第一处锚点。', '1girl, first again')],
+    });
+    const job3 = await waitJob(r3.data.job.id);
+    eq(job3.status, 'done', '落位：同锚点重出完成', job3.error || '');
+    list = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    eq(list.data.total, 3, '落位：同锚点只留一张（旧的进回收站）');
+    ok(!list.data.items.some((i) => i.id === oldFirst.id), '落位：同锚点的旧图被回收');
+    eq(list.data.items[list.data.items.length - 1].anchor, '第一处锚点。', '落位：新图继承旧图的排位');
+    const bin = await j('GET', '/api/recycle');
+    ok(bin.data.items.some((i) => i.id === oldFirst.id), '落位：旧图在回收站里（可还原）');
+
+    // ④ 认不出位置 → 散图夹，只在图库「全部」出现
+    const r4 = await j('POST', '/api/generate', {
+      sessionId: sid, sessionTitle: title, text: body2,
+      sets: [mk('这句根本不在正文里。', '1girl, loose')],
+    });
+    const job4 = await waitJob(r4.data.job.id);
+    eq(job4.status, 'done', '散图：出图完成', job4.error || '');
+    const loose = await j('GET', `/api/images/${job4.images[0].id}`);
+    eq(loose.data.image.scope, 'loose', '散图：记录标记为 loose');
+    ok(loose.data.image.absPath.includes('散图'), '散图：文件落在散图夹');
+    eq(loose.data.image.sessionId, '', '散图：不属于任何会话');
+    const sessionList = await j('GET', `/api/images?page=1&size=50&sessionId=${sid}&check=0`);
+    ok(!sessionList.data.items.some((i) => i.id === loose.data.image.id), '散图：不出现在会话图库');
+    const allList = await j('GET', '/api/images?page=1&size=50&check=0');
+    ok(allList.data.items.some((i) => i.id === loose.data.image.id), '散图：在图库「全部」里能看到');
+    await j('POST', '/api/active-session', { sessionId: sid, title });
+    const stateNow = await j('GET', '/api/state');
+    ok(!stateNow.data.images.some((i) => i.id === loose.data.image.id), '散图：图片框不显示');
   }
 
   section('清理');

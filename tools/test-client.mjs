@@ -463,7 +463,7 @@ ok(/var fullMediaKey = fullItem/.test(SRC) && /fullSrc\.key === fullMediaKey/.te
 ok(/replaceOld: genNow/.test(SRC) && /replaceOld: body\.replaceOld/.test(API_SRC) && /sessionImageIds/.test(fs.readFileSync(path.join(ROOT, 'lib', 'store.js'), 'utf8')), '请求生成把当前会话旧图整套替换为回收站');
 ok(/clearAfterSend/.test(SRC) && /投递后自动留空/.test(SRC), '概览位置下面有「投递后自动留空」，默认开');
 ok(/preferImgId/.test(SRC) && /imgs\[safeIdx \+ 1\] \|\| imgs\[safeIdx - 1\]/.test(SRC), '删除后优先下一张，没有下一张再上一张');
-ok(/picRows\.filter\(function \(x\) \{ return x && !x\.recycled && !x\.deletedAt; \}\)/.test(SRC) && /IMAGE_EVENT/.test(SRC) && /fireImageChanged/.test(SRC), '图片框过滤回收站图，图库删除会广播同步');
+ok(/picRows\.filter\(function \(x\) \{ return x && !x\.recycled && !x\.deletedAt && x\.scope !== "loose"; \}\)/.test(SRC) && /IMAGE_EVENT/.test(SRC) && /fireImageChanged/.test(SRC), '图片框过滤回收站图 / 散图，图库删除会广播同步');
 ok(/setViewImg\(null\)[\s\S]{0,160}setViewTick/.test(SRC) && /dataSig\.current = "";[\s\S]{0,180}load\(true\)/.test(SRC), '图片框刷新会丢掉旧 view 并强制重拉状态');
 ok(/ac-counter/.test(cssText) && /flashCounter/.test(SRC) && /counterVisible/.test(SRC), '图片框顶部有短暂显示的 xx/xx');
 ok(/onDoubleClick: function \(e\)[\s\S]{0,260}collapse\(e\.clientX, e\.clientY\);/.test(SRC) && !/if \(view\) openViewer/.test(SRC), '双击图片框收回悬浮球');
@@ -550,7 +550,7 @@ ok(/window\.addEventListener\("wheel", onWheel/.test(SRC), '图片框滚轮监�
 ok(/data-conversation-scroll/.test(SRC) && /data-conversation-scroll\]\[data-airp-dock/.test(cssText), '兼容旧版 DSH-Tavern 的会话滚动容器');
 ok(/ownerSessionId/.test(SRC) && /ownerSessionId/.test(fs.readFileSync(path.join(ROOT, 'lib', 'jobs.js'), 'utf8')), '图片按 ownerSessionId 归当前聊天');
 ok(/var size = 9;/.test(SRC) && /ac-gallery/.test(SRC) && /打开位置/.test(SRC), '图库每页 9 张、三列、顶部翻页和打开位置');
-ok(/openRecycle/.test(SRC) && /打开回收站位置/.test(SRC) && /scope: "recycle"/.test(SRC), '图库打开位置旁边有打开回收站位置');
+ok(/openRecycle/.test(SRC) && /打开回收站/.test(SRC) && /scope: "recycle"/.test(SRC) && /RecyclePanel/.test(SRC) && /api\.restore/.test(SRC), '图库回收站可打开、能还原');
 ok(/syncGallery/.test(SRC) && /api\.syncFavorites/.test(SRC) && /收藏同步完成/.test(SRC) && !/fav \? null : h\(Btn/.test(SRC), '收藏夹也有同步按钮，且走收藏同步接口');
 ok(/pendingDelete/.test(SRC) && /setPendingDelete/.test(SRC) && /shownItems = items\.filter/.test(SRC), '图库删除后先拿掉卡片，不留下黑图');
 ok(/删除成功后文件已经进回收站，继续停留只会看到黑图/.test(SRC), '大图查看器删除后自动关闭');
@@ -863,6 +863,8 @@ const imgTabs = byClass(imgPage, 'ac-subtab');
 const activeImgTab = imgTabs.find((n) => /\bon\b/.test(String(n.props?.className || '')));
 ok(activeImgTab && textOf(activeImgTab) === '当前会话', '图库默认打开当前会话，而不是全部');
 renderPage('ImagesPage(favorites)', T.ImagesPage, { state: fakeState, api: apiStub, toast: noop, onView: noop, mode: 'favorites' });
+const recyPanel = renderPage('RecyclePanel', T.RecyclePanel, { toast: noop, refresh: noop, onClose: noop });
+ok(recyPanel && textOf(recyPanel).includes('回收站') && textOf(recyPanel).includes('清空回收站'), '回收站面板有还原 / 清空入口');
 renderPage('Lightbox', T.Lightbox, { item: job.images[0], api: apiStub, toast: noop, onClose: noop });
 const loraData = {
   state: { effectiveSource: 'record' },
@@ -1010,7 +1012,7 @@ section('概览 / 工作台 / 设置');
   });
   ok(collect(autoPage).some((n) => n.props && n.props.value === 'auto-new-prompt'), '自动流程任务比草稿新时，工作台自动显示任务提示词');
   ok(collect(autoPage).some((n) => n.props && n.props.value === '这一场的最后一句。') && !textOf(autoPage).includes('插入点：这一场的最后一句。'), '任务里的原文锚点在输入框里显示，不再重复插入点文案');
-  ok(textOf(autoPage).includes('插入点已匹配当前图') && (textOf(autoPage).match(/插入点已匹配当前图/g) || []).length === 1, '锚点匹配到图片时只显示一条小字');
+  ok(textOf(autoPage).includes('锚点对上了现有图') && (textOf(autoPage).match(/锚点对上了现有图/g) || []).length === 1, '锚点匹配到图片时只显示一条小字（说明会替换那张）');
   sandbox.localStorage.setItem('airp-comfy:workbench:v1', JSON.stringify({
     sets: [{
       title: '新草稿', anchor: '草稿里保存的原文锚点。',
