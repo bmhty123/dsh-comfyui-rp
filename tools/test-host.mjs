@@ -214,9 +214,19 @@ function createFakeCtx() {
       if (s) s.running = false;
       return { ok: true };
     },
-    async inspect(sessionId) {
-      const s = sessions.get(sessionId);
-      return s ? { events: s.events.slice() } : null;
+    // 真 DSH（0.2.2+）的读史接口：{ address:{kind:'session',sessionId}, maxMessages }
+    //   → { records:[{type:'event',event}], hasMore, cursor }，按 seq 升序。
+    // ★ 这里故意**不提供旧的 inspect()**：线上宿主已经没有它了，
+    //   谁再改回 controller.inspect，这条假控制器会立刻让测试红。
+    async events(request, _signal) {
+      const sid = String(request?.address?.sessionId || '');
+      const s = sessions.get(sid);
+      if (!s) throw Object.assign(new Error(`session "${sid}" not found`), { code: 'session/not-found' });
+      return {
+        records: s.events.map((event) => ({ type: 'event', event })),
+        hasMore: false,
+        cursor: s.seq,
+      };
     },
   };
 
@@ -2027,6 +2037,28 @@ async function main() {
     await j('POST', '/api/active-session', { sessionId: sid, title });
     const stateNow = await j('GET', '/api/state');
     ok(!stateNow.data.images.some((i) => i.id === loose.data.image.id), '散图：图片框不显示');
+  }
+
+  section('会话读史接口兼容（新宿主已经没有 inspect）');
+  {
+    const sc = ctx.get('sessionController');
+    ok(typeof sc.inspect !== 'function', '假控制器和线上一致：没有 controller.inspect');
+    const s = sessions.get('s-source');
+    const originalEvents = sc.events;
+    // 只有 page() 的旧宿主：也要能读正文（不同 DSH 版本的接口名不一样）。
+    sc.events = undefined;
+    sc.page = async (request) => ({
+      records: (s.events || []).map((event) => ({ type: 'event', event })),
+      hasMore: false,
+      cursor: s.seq,
+    });
+    const viaPage = await j('GET', '/api/session-text?sessionId=s-source');
+    eq(viaPage.status, 200, '只有 page() 的宿主也能读正文');
+    ok(String(viaPage.data.text || '').length > 0, 'page() 路径读到了正文');
+    sc.page = undefined;
+    sc.events = originalEvents;
+    const viaEvents = await j('GET', '/api/session-text?sessionId=s-source');
+    eq(viaEvents.status, 200, 'events() 路径照常工作');
   }
 
   section('清理');

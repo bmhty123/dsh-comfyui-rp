@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.2.12
+
+- **修「测试失败：controller.inspect is not a function」，连带概览「重新获取正文」、工作台
+  「提取 / 从当前会话提取」、投递前读正文全部失效**：插件一直用 `sessionController.inspect()`
+  读会话历史，而现在宿主（`dsh-api-session-controller` 0.2.2-rc.3）的控制器**没有这个方法**
+  （它只有 `events()` / `page()` / `state()` / `projections()` 等）。
+  - 现在改成按宿主版本依次尝试 `events({ address, maxMessages })` → `page(...)` → `inspect(...)`，
+    用第一个能返回事件的；三个都没有才报一个能看懂的错误（`no-history-api`）。
+  - 假控制器同步改成线上形状（只有 `events()`，**故意不提供 `inspect`**），并新增「只有 `page()`
+    的旧宿主也能读正文」的回归断言，谁再改回 `inspect` 测试立刻红。
+- 主机测试 554 → 558。
+
 ## 0.2.11
 
 对齐酒馆版生图插件的「图片落位 / 重新生成」体验（T7 / T9 / T10 / T11 / T12 / X1 / X4）。
