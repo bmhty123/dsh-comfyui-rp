@@ -1014,6 +1014,36 @@ section('概览 / 工作台 / 设置');
   ok(collect(autoPage).some((n) => n.props && n.props.value === '这一场的最后一句。') && !textOf(autoPage).includes('插入点：这一场的最后一句。'), '任务里的原文锚点在输入框里显示，不再重复插入点文案');
   ok(textOf(autoPage).includes('锚点对上了现有图') && (textOf(autoPage).match(/锚点对上了现有图/g) || []).length === 1, '锚点匹配到图片时只显示一条小字（说明会替换那张）');
   ok(/黑图自动替换/.test(textOf(autoPage)) && /toggleBlackRetry/.test(SRC) && /blackRetry/.test(SRC), '工作台有「黑图自动替换」开关（和工作流那个字段同一个）');
+  // 连续图卡片：默认折叠，标题旁边灰色 Beta；勾上「启用」才展开。
+  ok(/var \[contOpen, setContOpen\] = useState\(!!contCfg\.on\)/.test(SRC)
+    && /collapsed: !contOpen/.test(SRC) && /onToggleCollapse/.test(SRC)
+    && /badge: "Beta"/.test(SRC), '连续图卡片可折叠，标题带 Beta，初始折叠状态跟「启用」一致');
+  ok(/setContOpen\(on\)/.test(SRC) && /useEffect\(function \(\) \{ setContOpen\(contOn\); \}, \[contOn\]\)/.test(SRC), '勾选「启用」展开、取消收起，外部改动也跟着收放');
+  ok(/\.ac-collapse\{/.test(cssText) && /\.ac-h2beta\{/.test(cssText) && /\.ac-card-collapsed h2\{/.test(cssText), '折叠箭头 / Beta 小字 / 折叠后标题间距的样式都在');
+  // 直接渲染 Card：折叠时标题留下、正文（档位 / 说明）不渲染，箭头朝右；展开则相反。
+  const collapsedCard = T.Card({ title: '连续图', badge: 'Beta', collapsed: true, onToggleCollapse: noop, children: 'CARD-BODY' });
+  const collapsedCardText = textOf(collapsedCard);
+  ok(collapsedCardText.includes('连续图') && collapsedCardText.includes('▸') && !collapsedCardText.includes('CARD-BODY'), '折叠时标题在、正文不渲染、箭头朝右');
+  const badgeNode = collect(collapsedCard).find((n) => n.props && n.props.className === 'ac-h2beta');
+  ok(!!badgeNode && textOf(badgeNode) === 'Beta', '标题旁边有灰色小字 Beta');
+  const openCard = T.Card({ title: '连续图', badge: 'Beta', collapsed: false, onToggleCollapse: noop, children: 'CARD-BODY' });
+  ok(textOf(openCard).includes('CARD-BODY') && textOf(openCard).includes('▾'), '展开时正文渲染、箭头朝下');
+  // 工作台实际传给卡片的折叠状态：没启用 → 折叠；启用 → 展开。
+  const contCardNode = collect(autoPage).find((n) => n.props && n.props.title === '连续图' && typeof n.props.onToggleCollapse === 'function');
+  ok(!!contCardNode && contCardNode.props.collapsed === true && contCardNode.props.badge === 'Beta', '工作台：连续图没启用时默认折叠，标题带 Beta');
+  const contOnPage = T.WorkbenchPage({
+    state: Object.assign({}, fakeState, {
+      config: Object.assign({}, fakeState.config, {
+        generation: Object.assign({}, fakeState.config.generation, {
+          continuous: { on: true, lora: '', strengths: [null, null, null] },
+        }),
+      }),
+    }),
+    jobs: [autoJob], images: [], liveJob: autoJob, api: apiStub,
+    refresh: noop, toast: noop, saveConfig: () => Promise.resolve(), onView: noop, sessionId: 's1',
+  });
+  const contOnCardNode = collect(contOnPage).find((n) => n.props && n.props.title === '连续图' && typeof n.props.onToggleCollapse === 'function');
+  ok(!!contOnCardNode && contOnCardNode.props.collapsed === false, '工作台：勾上「启用」后连续图正文展开');
   ok(/var job = visibleJobs\[0\] \|\| null;/.test(SRC) && /\|\| visibleJobs\[0\] \|\| null;/.test(SRC), '内部补图任务不会被当成“当前这轮”');
   sandbox.localStorage.setItem('airp-comfy:workbench:v1', JSON.stringify({
     sets: [{
