@@ -1348,6 +1348,8 @@ async function main() {
     const rg = await j('POST', '/api/regenerate', {
       imageId: oldId, jobId: base.id, setIndex: base.images[0].setIndex,
       sessionId: sid, sessionTitle: title,
+      // 图片框「服装错位」快捷按钮就是这条：单张重新生成 + 固定要求。
+      extra: '服装错位（角色互串服装）',
     });
     const rjob = await waitJob(rg.data.job.id);
     eq(rjob.status, 'done', '重新生成当前图完成', rjob.error || '');
@@ -1362,6 +1364,9 @@ async function main() {
     // 跟酒馆版一致：重新生成不带正文（省 token），玩家要求进【重新生成要求】。
     ok(!String(rjob.outgoingText).includes('【正文】'), '重新生成不重发正文');
     ok(!String(rjob.outgoingText).includes('第 1 张') && !String(rjob.outgoingText).includes('第1张'), '重新生成不再报「第 N 张」');
+    ok(String(rjob.outgoingText).includes('【重新生成要求】')
+      && String(rjob.outgoingText).includes('服装错位（角色互串服装）')
+      && String(rjob.outgoingText).includes('【/重新生成要求】'), '服装错位快捷要求进【重新生成要求】（和仅此图同一条消息）');
     const afterRegen = await j('GET', `/api/images?page=1&size=24&sessionId=${sid}&check=0`);
     eq(afterRegen.data.total, 2, '重新生成后图片数量不变');
     eq(afterRegen.data.items.findIndex((i) => i.id === oldId), oldIndex, '重新生成保留原图片位置，不排到最新');

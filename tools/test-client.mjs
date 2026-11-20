@@ -619,16 +619,27 @@ try {
   ok(!/\bM\b/.test(labels.join(',')), '菜单里不再出现 M 状态');
   const sub = kids.find((c) => c && c.props && c.props.className === 'ac-bubble-sub');
   ok(sub && (sub.children || []).filter(Boolean).length === 4, '共用菜单更多里有下载 / 收藏 / 刷新 / 圆角切换（没有跟随开关时不占位）');
+  const costumeCalls = [];
   const regenTools = T.FrameTools({
     show: true, live: false, hasJob: true, hasImage: true, autoOn: true, contOn: false,
     menuOpen: true, regenOpen: true, regenText: '',
     onToggleMenu: noop, onToggleSub: noop, onCapture: noop, onToggleRegen: noop,
     onRegenText: noop, onRegenSingle: noop, onRegenAll: noop, onStop: noop,
+    onRegenCostume: function () { costumeCalls.push(1); },
     onContinuous: noop, onAuto: noop, onDelete: noop, onDownload: noop, onFav: noop, onRefresh: noop,
     deleteDisabled: false, downloadDisabled: false, favDisabled: false, favorited: false,
   });
   const regenBox = (regenTools.children || []).find((c) => c && c.props && c.props.className === 'ac-regenbox');
   ok(!!regenBox && textOf(regenBox).includes('仅此图') && textOf(regenBox).includes('全部'), '重新生成面板有仅此图 / 全部两个入口');
+  const costumeBtn = collect(regenBox).find((n) => Array.isArray(n.children) && n.children.indexOf('服装错位') >= 0);
+  ok(!!costumeBtn, '重新生成面板里有「服装错位」快捷按钮');
+  costumeBtn && costumeBtn.props.onClick();
+  ok(costumeCalls.length === 1, '点「服装错位」直接发起重生成（不用先填文本框）');
+  ok(/\.ac-regenquick\{font-style:italic/.test(cssText), '「服装错位」按钮是斜体');
+  ok(/var COSTUME_EXTRA = "服装错位（角色互串服装）"/.test(SRC), '快捷要求文案写死为「服装错位（角色互串服装）」');
+  ok(/onRegenCostume: function \(\) \{ runRegenFor\(img, "single", COSTUME_EXTRA, "服装错位"\)/.test(SRC)
+    && /onRegenCostume: function \(\) \{ fullRegenerate\("single", COSTUME_EXTRA, "服装错位"\)/.test(SRC), '悬浮 / 固定图片框和全屏面板都接上了');
+  ok(/extraOverride/, '快捷按钮的要求优先于文本框（走 extraOverride）');
   ok(!!regenBox && (regenBox.children || []).some((c) => c && c.type === 'textarea' || (c && c.props && c.props.placeholder && String(c.props.placeholder).includes('可选要求'))), '重新生成面板有一个共用文本框');
   ok(/bubble\("square"/.test(SRC) && /onToggleSquare/.test(SRC) && /\.ac-frame\.square\{/.test(cssText), '三级菜单可切换圆角 / 直角');
   const followTools = T.FrameTools({
